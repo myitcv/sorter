@@ -33,7 +33,3 @@ func main() {
 func orderByName(persons []person, i, j int) sorter.Order {
 	return persons[i].name < persons[j].name
 }
-
-func orderByAge(persons []person, i, j int) sorter.Order {
-	return persons[i].age < persons[j].age
-}
