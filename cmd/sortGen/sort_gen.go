@@ -14,17 +14,48 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
+	OrderPrefix = "order"
+
+	SorterOrderTypeName = "Order"
+
 	GoFile        = "GOFILE"
 	GoPackage     = "GOPACKAGE"
 	GenFilePrefix = "gen_"
 	GenFileSuffix = "_sorter.go"
-	GoGenPattern  = `^//go:generate +sortGen` // TODO shouldn't hard-code this to sortGen, should use os.Arg(0)?
+
+	// TODO shouldn't hard-code this to sortGen, should use os.Arg(0)?
+	GoGenPattern = `^//go:generate +sortGen`
 )
 
-var GoGenRegex = regexp.MustCompile(GoGenPattern)
+var GoGenerateRegex *regexp.Regexp
+var OrderFunctionRegex *regexp.Regexp
+var LowerOrder string
+var UpperOrder string
+
+func init() {
+	r, n := utf8.DecodeRuneInString(OrderPrefix)
+	if r == utf8.RuneError {
+		panic("OrderPrefix not a UTF8 string?")
+	}
+
+	l := string(unicode.ToLower(r))
+	u := string(unicode.ToUpper(r))
+
+	suffix := OrderPrefix[n:]
+
+	LowerOrder = l + suffix
+	UpperOrder = u + suffix
+
+	orderFunctionPattern := `^[` + l + u + `]` + suffix + `[[:word:]]+`
+	OrderFunctionRegex = regexp.MustCompile(orderFunctionPattern)
+
+	GoGenerateRegex = regexp.MustCompile(GoGenPattern)
+}
 
 var NotFirstFile = errors.New("Not first go generate file")
 
@@ -117,7 +148,7 @@ func getMatches(dir string, goFile string, goPkg string) (map[string][]string, e
 	FileComments:
 		for _, cg := range cm[f] {
 			for _, com := range cg.List {
-				if GoGenRegex.MatchString(com.Text) {
+				if GoGenerateRegex.MatchString(com.Text) {
 					foundComment = true
 					break FileComments
 				}
@@ -201,17 +232,7 @@ Decls:
 
 		fn := fun.Name.Name
 
-		lower := false
-		upper := false
-
-		// TODO check that the fn is not just order or Order
-		if strings.HasPrefix(fn, "order") {
-			lower = true
-		} else if strings.HasPrefix(fn, "Order") {
-			upper = true
-		}
-
-		if !lower && !upper {
+		if !OrderFunctionRegex.MatchString(fn) {
 			continue
 		}
 
@@ -233,7 +254,7 @@ Decls:
 			continue
 		}
 
-		if typ.Sel.Name != "Order" {
+		if typ.Sel.Name != SorterOrderTypeName {
 			continue
 		}
 
@@ -258,10 +279,14 @@ Decls:
 			continue
 		}
 
-		// TODO we can be looser here... can pretty much allow
-		// anything because we know we have a slice
-		sliceIdent, ok := at.Elt.(*ast.Ident)
-		if !ok {
+		sliceIdent := ""
+		switch t := at.Elt.(type) {
+		case *ast.Ident:
+			sliceIdent = t.Name
+		case *ast.SelectorExpr:
+			// TODO work out how to handle this...
+			continue
+		default:
 			continue
 		}
 
@@ -271,12 +296,12 @@ Decls:
 			}
 		}
 
-		funs, ok := matches[sliceIdent.Name]
+		funs, ok := matches[sliceIdent]
 		if !ok {
 			funs = make([]string, 0)
 		}
 		funs = append(funs, fun.Name.Name)
-		matches[sliceIdent.Name] = funs
+		matches[sliceIdent] = funs
 	}
 
 	return matches, nil
@@ -346,11 +371,11 @@ func sortFunction(orderFn string) string {
 	lower := false
 	split := ""
 
-	if strings.HasPrefix(orderFn, "O") {
-		split = "Order"
+	if strings.HasPrefix(orderFn, UpperOrder) {
+		split = UpperOrder
 	} else {
 		lower = true
-		split = "order"
+		split = LowerOrder
 	}
 
 	parts := strings.SplitAfterN(orderFn, split, 2)

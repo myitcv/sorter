@@ -1,12 +1,27 @@
 ## `sortGen`
 
-A [`go generate`](https://blog.golang.org/generate)-or to make sorting of arbitrary slices easier using order functions:
+A [`go generate`](https://blog.golang.org/generate)-or that makes sorting arbitrary slices easier via order functions, removing
+the need to implement [`sort.Interface`](https://godoc.org/sort#Interface) etc.
+
+Simply define an order function on the slice type of interest:
 
 ```go
 func orderByName(persons []person, i, j int) sorter.Order {
 	return persons[i].name < persons[j].name
 }
 ```
+
+then run `go generate` and a corresponding sort function will have been generated for you:
+
+```go
+// gen_person_sorter.go
+
+func sortByName(vs []person) {
+
+	// ...
+```
+
+See the example and rules below for more details.
 
 ### Install
 
@@ -76,7 +91,8 @@ Age sorted: [{Paul 25} {Jill 34} {Sarah 60}]
 `sortGen` generates sort functions according to the following simple rules:
 
 1. The file containing the order function must include the directive `//go:generate sortGen`
-2. The order function name must be of the form `"order*"` or `"Order*"`
+2. The order function name must be of the form `"order*"` or `"Order*"` (more strictly `^[oO]rder[[:word:]]+` in a [regex](https://godoc.org/regexp)
+   [pattern](https://github.com/google/re2/wiki/Syntax))
 3. The parameters of the order function must be a slice type, followed by two `int`'s
 4. The return type must be `github.com/myitcv/sorter.Order`
 
