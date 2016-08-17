@@ -1,6 +1,6 @@
 ## `sortGen`
 
-A `go generate`-or to make sorting of arbitrary slices easier using order functions:
+A [`go generate`](https://blog.golang.org/generate)-or to make sorting of arbitrary slices easier using order functions:
 
 ```go
 func orderByName(persons []person, i, j int) sorter.Order {
