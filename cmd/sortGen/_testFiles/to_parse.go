@@ -2,7 +2,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 
 	"github.com/myitcv/sorter"
@@ -31,16 +30,22 @@ func main() {
 	fmt.Printf("Age sorted: %v\n", people)
 }
 
+// MATCH
 func orderByName(persons []person, i, j int) sorter.Order {
 	return persons[i].name < persons[j].name
 }
 
-// this will not get matched
+// fail
 func order(persons []person, i, j int) sorter.Order {
 	return persons[i].name < persons[j].name
 }
 
-// TODO
-func orderBufferByContents(buffers []bytes.Buffer, i int, j int) sorter.Order {
-	return buffers[i].String() < buffers[j].String()
+// MATCH
+func orderPointerByName(persons []*person, i, j int) sorter.Order {
+	return persons[i].name < persons[j].name
 }
+
+// fail
+// func orderBufferByContents(buffers []bytes.Buffer, i int, j int) sorter.Order {
+// 	return buffers[i].String() < buffers[j].String()
+// }
