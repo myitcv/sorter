@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/format"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"io/ioutil"
 	"os"
@@ -36,6 +37,7 @@ var GoGenerateRegex *regexp.Regexp
 var OrderFunctionRegex *regexp.Regexp
 var LowerOrder string
 var UpperOrder string
+var InvalidFileChar *regexp.Regexp
 
 func init() {
 	r, n := utf8.DecodeRuneInString(OrderPrefix)
@@ -55,6 +57,8 @@ func init() {
 	OrderFunctionRegex = regexp.MustCompile(orderFunctionPattern)
 
 	GoGenerateRegex = regexp.MustCompile(GoGenPattern)
+
+	InvalidFileChar = regexp.MustCompile(`[[:^word:]]`)
 }
 
 var NotFirstFile = errors.New("Not first go generate file")
@@ -201,7 +205,7 @@ func getMatches(dir string, goFile string, goPkg string) (map[string][]string, e
 	realRes := make(map[string][]string)
 
 	for f, theImport := range files {
-		res, err := getMatchesFromFile(f, theImport, goPkg)
+		res, err := getMatchesFromFile(f, fset, theImport, goPkg)
 		if err != nil {
 			return nil, err
 		}
@@ -220,7 +224,7 @@ func getMatches(dir string, goFile string, goPkg string) (map[string][]string, e
 	return realRes, nil
 }
 
-func getMatchesFromFile(f *ast.File, theImport string, goPkg string) (map[string][]string, error) {
+func getMatchesFromFile(f *ast.File, fset *token.FileSet, theImport string, goPkg string) (map[string][]string, error) {
 	matches := make(map[string][]string)
 
 Decls:
@@ -279,16 +283,12 @@ Decls:
 			continue
 		}
 
-		sliceIdent := ""
-		switch t := at.Elt.(type) {
-		case *ast.Ident:
-			sliceIdent = t.Name
-		case *ast.SelectorExpr:
-			// TODO work out how to handle this...
-			continue
-		default:
-			continue
-		}
+		// TODO we need to do more here... because we need to work out
+		// whether there should be additional imports in the generated
+		// files
+		var buf bytes.Buffer
+		printer.Fprint(&buf, fset, at.Elt)
+		sliceIdent := buf.String()
 
 		for i := 1; i < len(paramList); i++ {
 			if id, ok := paramList[i].(*ast.Ident); !ok || id.Name != "int" {
@@ -314,7 +314,8 @@ Decls:
 
 func genMatches(matches map[string][]string, pkg string, path string) error {
 	for typ, funs := range matches {
-		ofName := filepath.Join(path, "gen_"+typ+"_sorter.go")
+		name := "gen_" + typeStringToFileName(typ) + "_sorter.go"
+		ofName := filepath.Join(path, name)
 
 		out := bytes.NewBuffer([]byte(`package ` + pkg + `
 
@@ -385,4 +386,13 @@ func sortFunction(orderFn string) string {
 	} else {
 		return "Sort" + parts[1]
 	}
+}
+
+func typeStringToFileName(s string) string {
+	// safely translate to a filename
+	res := s
+	res = strings.Replace(res, "[]", "sl_", -1)
+	res = strings.Replace(res, "*", "p_", -1)
+
+	return InvalidFileChar.ReplaceAllString(res, "_")
 }
