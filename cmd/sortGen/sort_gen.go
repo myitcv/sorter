@@ -79,7 +79,7 @@ func main() {
 		panic(err)
 	}
 
-	matches, err := getMatches(wd, goFile, goPkg)
+	matches, err := getMatchesForPkg(wd, goFile, goPkg)
 	if err != nil {
 		if err == NotFirstFile {
 			return
@@ -126,7 +126,12 @@ func filterGeneratedFiles(file os.FileInfo) bool {
 	return !strings.HasPrefix(fn, GenFilePrefix) || !strings.HasSuffix(fn, GenFileSuffix)
 }
 
-func getMatches(dir string, goFile string, goPkg string) (map[string][]string, error) {
+type fileMatches struct {
+	imports map[string]bool
+	funs    map[string][]string
+}
+
+func getMatchesForPkg(dir string, goFile string, goPkg string) (map[string]fileMatches, error) {
 	fset := token.NewFileSet()
 
 	pkgs, err := parser.ParseDir(fset, dir, filterGeneratedFiles, parser.AllErrors|parser.ParseComments)
@@ -202,7 +207,7 @@ func getMatches(dir string, goFile string, goPkg string) (map[string][]string, e
 		}
 	}
 
-	realRes := make(map[string][]string)
+	realRes := make(map[string]fileMatches)
 
 	for f, theImport := range files {
 		res, err := getMatchesFromFile(f, fset, theImport, goPkg)
@@ -210,22 +215,54 @@ func getMatches(dir string, goFile string, goPkg string) (map[string][]string, e
 			return nil, err
 		}
 
+		typeMap := make(map[string][]string)
+		importMap := make(map[string]bool)
+
 		// we need to union the list of functions
 		for typ, fns := range res {
-			if typFns, ok := realRes[typ]; ok {
+			// TODO we need to do more here... because we need to work out
+			// whether there should be additional imports in the generated
+			// files
+			var buf bytes.Buffer
+			printer.Fprint(&buf, fset, typ)
+			sliceIdent := buf.String()
+
+			// we need to calculate the required imports
+			importMatches := findImports(typ, f.Imports)
+
+			for i := range importMatches {
+				importName := i.Path.Value
+				if i.Name != nil {
+					importName = i.Name.Name + " " + importName
+				}
+
+				importMap[importName] = true
+			}
+
+			if typFns, ok := typeMap[sliceIdent]; ok {
 				typFns = append(typFns, fns...)
-				realRes[typ] = typFns
+				typeMap[sliceIdent] = typFns
 			} else {
-				realRes[typ] = fns
+				typeMap[sliceIdent] = fns
 			}
 		}
+
+		fileName := fset.Position(f.Pos()).Filename
+		basename := strings.TrimSuffix(filepath.Base(fileName), ".go")
+
+		matches := fileMatches{
+			funs:    typeMap,
+			imports: importMap,
+		}
+
+		realRes[basename] = matches
 	}
 
 	return realRes, nil
 }
 
-func getMatchesFromFile(f *ast.File, fset *token.FileSet, theImport string, goPkg string) (map[string][]string, error) {
-	matches := make(map[string][]string)
+func getMatchesFromFile(f *ast.File, fset *token.FileSet, theImport string, goPkg string) (map[ast.Expr][]string, error) {
+	matches := make(map[ast.Expr][]string)
 
 Decls:
 	for _, d := range f.Decls {
@@ -283,25 +320,18 @@ Decls:
 			continue
 		}
 
-		// TODO we need to do more here... because we need to work out
-		// whether there should be additional imports in the generated
-		// files
-		var buf bytes.Buffer
-		printer.Fprint(&buf, fset, at.Elt)
-		sliceIdent := buf.String()
-
 		for i := 1; i < len(paramList); i++ {
 			if id, ok := paramList[i].(*ast.Ident); !ok || id.Name != "int" {
 				continue Decls
 			}
 		}
 
-		funs, ok := matches[sliceIdent]
+		funs, ok := matches[at.Elt]
 		if !ok {
 			funs = make([]string, 0)
 		}
 		funs = append(funs, fun.Name.Name)
-		matches[sliceIdent] = funs
+		matches[at.Elt] = funs
 	}
 
 	return matches, nil
@@ -312,9 +342,9 @@ Decls:
 // 1. support slices of imported types (would mean match.typ could be different)
 // 2. support for orderers with errors?
 
-func genMatches(matches map[string][]string, pkg string, path string) error {
+func genMatches(matches map[string]fileMatches, pkg string, path string) error {
 	for typ, funs := range matches {
-		name := "gen_" + typeStringToFileName(typ) + "_sorter.go"
+		name := "gen_" + typ + "_sorter.go"
 		ofName := filepath.Join(path, name)
 
 		out := bytes.NewBuffer([]byte(`package ` + pkg + `
@@ -324,24 +354,30 @@ func genMatches(matches map[string][]string, pkg string, path string) error {
 
 		`))
 
-		for _, fun := range funs {
-			sortName := sortFunction(fun)
+		for i := range funs.imports {
+			fmt.Fprintln(out, "import", i)
+		}
 
-			fmt.Fprint(out, `
-			func `+sortName+`(vs []`+typ+`) {
-				sort.Sort(&sorter.Wrapper{
-					LenFunc: func() int {
-						return len(vs)
-					},
-					LessFunc: func(i, j int) bool {
-						return bool(`+fun+`(vs, i, j))
-					},
-					SwapFunc: func(i, j int) {
-						vs[i], vs[j] = vs[j], vs[i]
-					},
-				})
+		for typ, funs := range funs.funs {
+			for _, fun := range funs {
+				sortName := sortFunction(fun)
+
+				fmt.Fprint(out, `
+				func `+sortName+`(vs []`+typ+`) {
+					sort.Sort(&sorter.Wrapper{
+						LenFunc: func() int {
+							return len(vs)
+						},
+						LessFunc: func(i, j int) bool {
+							return bool(`+fun+`(vs, i, j))
+						},
+						SwapFunc: func(i, j int) {
+							vs[i], vs[j] = vs[j], vs[i]
+						},
+					})
+				}
+				`)
 			}
-			`)
 		}
 
 		toWrite := out.Bytes()
@@ -395,4 +431,44 @@ func typeStringToFileName(s string) string {
 	res = strings.Replace(res, "*", "p_", -1)
 
 	return InvalidFileChar.ReplaceAllString(res, "_")
+}
+
+type importFinder struct {
+	imports []*ast.ImportSpec
+	matches map[*ast.ImportSpec]bool
+}
+
+func (i *importFinder) Visit(node ast.Node) ast.Visitor {
+	switch node := node.(type) {
+	case *ast.SelectorExpr:
+		if x, ok := node.X.(*ast.Ident); ok {
+			for _, imp := range i.imports {
+				if imp.Name != nil {
+					if x.Name == imp.Name.Name {
+						i.matches[imp] = true
+					}
+				} else {
+					cleanPath := strings.Trim(imp.Path.Value, "\"")
+					parts := strings.Split(cleanPath, "/")
+					if x.Name == parts[len(parts)-1] {
+						i.matches[imp] = true
+					}
+				}
+			}
+
+		}
+	}
+
+	return i
+}
+
+func findImports(exp ast.Expr, imports []*ast.ImportSpec) map[*ast.ImportSpec]bool {
+	finder := &importFinder{
+		imports: imports,
+		matches: make(map[*ast.ImportSpec]bool),
+	}
+
+	ast.Walk(finder, exp)
+
+	return finder.matches
 }

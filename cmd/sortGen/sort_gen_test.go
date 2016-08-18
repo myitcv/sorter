@@ -9,21 +9,23 @@ import (
 )
 
 func TestBasic(t *testing.T) {
-	matches, err := getMatches("_testFiles/", "to_parse.go", "main")
+	matches, err := getMatchesForPkg("_testFiles/", "to_parse.go", "main")
 
 	if err != nil {
 		t.Fatalf("Expected err to be nil, got %v", err)
 	}
+
+	fmt.Printf("%v\n", matches)
 
 	// number of types matched
 	if len(matches) != 2 {
 		t.Fatalf("We got %v matches instead of 2", len(matches))
 	}
 
-	funs := matches["person"]
+	funs := matches["to_parse"]
 
-	if len(funs) != 2 {
-		t.Fatalf("We got %v function matches instead of 2", len(funs))
+	if len(funs.funs) != 4 {
+		t.Fatalf("We got %v function matches instead of 4", len(funs.funs))
 	}
 
 	tmpDir, err := ioutil.TempDir("", "sortGen_temp")
