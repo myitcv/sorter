@@ -7,8 +7,7 @@ install: true
 
 before_script:
   - go install github.com/myitcv/sorter/cmd/sortGen
-  - go generate ./...
-  - ./_scripts/check_git_is_clean.sh
 
 script:
   - ./_scripts/run_tests.sh
+  - ./_scripts/check_git_is_clean.sh

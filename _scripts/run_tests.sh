@@ -2,7 +2,9 @@
 
 set -e
 
-go test ./...
+go generate
+
+# no tests to run here...
 
 cd cmd/sortGen/_testFiles/
 
