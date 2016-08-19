@@ -3,7 +3,7 @@
 
 package sorter
 
-type Order bool
+type Ordered bool
 
 // Inspired by https://github.com/mattn/sorter
 type (

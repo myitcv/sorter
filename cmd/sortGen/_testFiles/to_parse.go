@@ -32,25 +32,25 @@ func main() {
 }
 
 // MATCH
-func orderByName(persons []person, i, j int) sorter.Order {
+func orderByName(persons []person, i, j int) sorter.Ordered {
 	return persons[i].name < persons[j].name
 }
 
 // fail
-func order(persons []person, i, j int) sorter.Order {
+func order(persons []person, i, j int) sorter.Ordered {
 	return persons[i].name < persons[j].name
 }
 
 // MATCH
-func orderPointerByName(persons []*person, i, j int) sorter.Order {
+func orderPointerByName(persons []*person, i, j int) sorter.Ordered {
 	return persons[i].name < persons[j].name
 }
 
 // MATCH
-func orderBufferByContents(buffers []bytes.Buffer, i int, j int) sorter.Order {
+func orderBufferByContents(buffers []bytes.Buffer, i int, j int) sorter.Ordered {
 	return buffers[i].String() < buffers[j].String()
 }
 
-func orderMap(buffers []map[string]bool, i int, j int) sorter.Order {
+func orderMap(buffers []map[string]bool, i int, j int) sorter.Ordered {
 	return true
 }

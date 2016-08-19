@@ -25,7 +25,7 @@ import (
 const (
 	OrderPrefix = "order"
 
-	SorterOrderTypeName = "Order"
+	SorterOrderTypeName = "Ordered"
 
 	GoFile        = "GOFILE"
 	GoPackage     = "GOPACKAGE"
