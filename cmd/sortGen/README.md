@@ -9,7 +9,7 @@ Simply define an order function on the slice type of interest:
 // main.go
 //go:generate sortGen
 
-func orderByName(persons []person, i, j int) sorter.Order {
+func orderByName(persons []person, i, j int) sorter.Ordered {
 	return persons[i].name < persons[j].name
 }
 ```
@@ -69,11 +69,11 @@ func main() {
 	fmt.Printf("Age sorted: %v\n", people)
 }
 
-func orderByName(persons []person, i, j int) sorter.Order {
+func orderByName(persons []person, i, j int) sorter.Ordered {
 	return persons[i].name < persons[j].name
 }
 
-func orderByAge(persons []person, i, j int) sorter.Order {
+func orderByAge(persons []person, i, j int) sorter.Ordered {
 	return persons[i].age < persons[j].age
 }
 ```
@@ -99,7 +99,7 @@ Examine the contents of `gen_main_sorter.go` to see the generated functions.
 2. The order function name must be of the form `"order*"` or `"Order*"` (more strictly `^[oO]rder[[:word:]]+` in a [regex](https://godoc.org/regexp)
    [pattern](https://github.com/google/re2/wiki/Syntax))
 3. The parameters of the order function must be a slice type, followed by two `int`'s
-4. The return type must be `github.com/myitcv/sorter.Order`
+4. The return type must be `github.com/myitcv/sorter.Ordered`
 
 The sort functions generated will be of the form `"sort*"` or `"Sort*"` (following the capitalisation
 of the order function). They will be written to a file with a name corresponding to the input file,
