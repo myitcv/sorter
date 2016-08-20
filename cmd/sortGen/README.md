@@ -37,7 +37,8 @@ go get -u github.com/myitcv/sorter/cmd/sortGen
 Taking the example from [`example/main.go`](https://github.com/myitcv/sorter/blob/master/example/main.go):
 
 ```go
-//go:generate sortGen
+//go:generate sortGen -licenseFile license_header.txt
+
 package main
 
 import (
@@ -94,7 +95,12 @@ Name sorted: [{Jill 34} {Paul 25} {Sarah 60}]
 Age sorted: [{Paul 25} {Jill 34} {Sarah 60}]
 ```
 
-Examine the contents of `gen_main_sorter.go` to see the generated functions.
+Examine the contents of [`gen_main_sorter.go`](https://github.com/myitcv/sorter/blob/master/example/gen_main_sorter.go) to see the generated functions.
+
+### Features
+
+* Supports `-licenseFile FILENAME` flag which allows a file containing an uncommented license header
+to be included (commented) at the top of each generated file
 
 ### Rules
 

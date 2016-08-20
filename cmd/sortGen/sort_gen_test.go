@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -35,7 +36,9 @@ func TestBasic(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	err = genMatches(matches, "main", tmpDir)
+	license := bytes.NewBuffer([]byte("My favourite license"))
+
+	err = genMatches(matches, "main", tmpDir, license)
 
 	if err != nil {
 		t.Fatalf("Expected gen err to be nil, got %v", err)
