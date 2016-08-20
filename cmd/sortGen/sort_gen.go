@@ -23,27 +23,31 @@ import (
 )
 
 const (
-	OrderPrefix = "order"
+	_SorterPackage = "github.com/myitcv/sorter"
 
-	SorterOrderTypeName = "Ordered"
+	_OrderPrefix = "order"
 
-	GoFile        = "GOFILE"
-	GoPackage     = "GOPACKAGE"
-	GenFilePrefix = "gen_"
-	GenFileSuffix = "_sorter.go"
+	_SorterOrderTypeName = "Ordered"
+
+	_GoFile        = "GOFILE"
+	_GoPackage     = "GOPACKAGE"
+	_GenFilePrefix = "gen_"
+	_GenFileSuffix = "_sorter.go"
 
 	// TODO shouldn't hard-code this to sortGen, should use os.Arg(0)?
-	GoGenPattern = `^//go:generate +sortGen`
+	_GoGenPattern = `^//go:generate +sortGen`
 )
 
-var GoGenerateRegex *regexp.Regexp
-var OrderFunctionRegex *regexp.Regexp
-var LowerOrder string
-var UpperOrder string
-var InvalidFileChar *regexp.Regexp
+var _GoGenerateRegex *regexp.Regexp
+var _OrderFunctionRegex *regexp.Regexp
+var _LowerOrder string
+var _UpperOrder string
+var _InvalidFileChar *regexp.Regexp
+
+var errNotFirstFile = errors.New("Not first go generate file")
 
 func init() {
-	r, n := utf8.DecodeRuneInString(OrderPrefix)
+	r, n := utf8.DecodeRuneInString(_OrderPrefix)
 	if r == utf8.RuneError {
 		panic("OrderPrefix not a UTF8 string?")
 	}
@@ -51,30 +55,28 @@ func init() {
 	l := string(unicode.ToLower(r))
 	u := string(unicode.ToUpper(r))
 
-	suffix := OrderPrefix[n:]
+	suffix := _OrderPrefix[n:]
 
-	LowerOrder = l + suffix
-	UpperOrder = u + suffix
+	_LowerOrder = l + suffix
+	_UpperOrder = u + suffix
 
 	orderFunctionPattern := `^[` + l + u + `]` + suffix + `[[:word:]]+`
-	OrderFunctionRegex = regexp.MustCompile(orderFunctionPattern)
+	_OrderFunctionRegex = regexp.MustCompile(orderFunctionPattern)
 
-	GoGenerateRegex = regexp.MustCompile(GoGenPattern)
+	_GoGenerateRegex = regexp.MustCompile(_GoGenPattern)
 
-	InvalidFileChar = regexp.MustCompile(`[[:^word:]]`)
+	_InvalidFileChar = regexp.MustCompile(`[[:^word:]]`)
 }
 
-var NotFirstFile = errors.New("Not first go generate file")
-
 func main() {
-	goFile, ok := os.LookupEnv(GoFile)
+	goFile, ok := os.LookupEnv(_GoFile)
 	if !ok {
-		panic("Env not correct; missing " + GoFile)
+		panic("Env not correct; missing " + _GoFile)
 	}
 
-	goPkg, ok := os.LookupEnv(GoPackage)
+	goPkg, ok := os.LookupEnv(_GoPackage)
 	if !ok {
-		panic("Env not correct; missing " + GoPackage)
+		panic("Env not correct; missing " + _GoPackage)
 	}
 
 	wd, err := os.Getwd()
@@ -84,7 +86,7 @@ func main() {
 
 	matches, err := getMatchesForPkg(wd, goFile, goPkg)
 	if err != nil {
-		if err == NotFirstFile {
+		if err == errNotFirstFile {
 			return
 		}
 
@@ -112,9 +114,8 @@ func removeGeneratedFiles(dir string) error {
 	}
 
 	for _, e := range entries {
-		fn := e.Name()
-		if strings.HasPrefix(fn, GenFilePrefix) && strings.HasSuffix(fn, GenFileSuffix) {
-			err = os.Remove(filepath.Join(dir, fn))
+		if !fileNotGenerated(e) {
+			err = os.Remove(filepath.Join(dir, e.Name()))
 			if err != nil {
 				return err
 			}
@@ -124,28 +125,38 @@ func removeGeneratedFiles(dir string) error {
 	return nil
 }
 
-func filterGeneratedFiles(file os.FileInfo) bool {
+func fileNotGenerated(file os.FileInfo) bool {
 	fn := file.Name()
-	return !strings.HasPrefix(fn, GenFilePrefix) || !strings.HasSuffix(fn, GenFileSuffix)
+	return !strings.HasPrefix(fn, _GenFilePrefix) || !strings.HasSuffix(fn, _GenFileSuffix)
 }
 
 type fileMatches struct {
+	// the string is the import name and quoted path combined
 	imports map[string]bool
-	funs    map[string][]string
+
+	funs []sortFunToGen
 }
 
-func getMatchesForPkg(dir string, goFile string, goPkg string) (map[string]fileMatches, error) {
+type sortFunToGen struct {
+	name    string
+	recv    string
+	recvVar string
+	typ     string
+}
+
+// getMatchesForPkg returns a map[string]fileMatches where the string is the filename where
+// the matches were found
+func getMatchesForPkg(path string, envFile string, envPkg string) (map[string]fileMatches, error) {
 	fset := token.NewFileSet()
 
-	pkgs, err := parser.ParseDir(fset, dir, filterGeneratedFiles, parser.AllErrors|parser.ParseComments)
+	pkgs, err := parser.ParseDir(fset, path, fileNotGenerated, parser.AllErrors|parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
 
-	theImport := ""
-
-	pkg, ok := pkgs[goPkg]
+	pkg, ok := pkgs[envPkg]
 	if !ok {
+		// TODO come up with a proper error strategy
 		panic("Oh dear...")
 	}
 
@@ -160,7 +171,7 @@ func getMatchesForPkg(dir string, goFile string, goPkg string) (map[string]fileM
 	FileComments:
 		for _, cg := range cm[f] {
 			for _, com := range cg.List {
-				if GoGenerateRegex.MatchString(com.Text) {
+				if _GoGenerateRegex.MatchString(com.Text) {
 					foundComment = true
 					break FileComments
 				}
@@ -172,22 +183,22 @@ func getMatchesForPkg(dir string, goFile string, goPkg string) (map[string]fileM
 		}
 
 		// now see whether it imports the sorter package
-		theImport = ""
+		sorterImport := ""
 
 		for _, s := range f.Imports {
-			if s.Path.Value == `"github.com/myitcv/sorter"` {
+			if s.Path.Value == `"`+_SorterPackage+`"` {
 				if s.Name != nil {
-					theImport = s.Name.Name
+					sorterImport = s.Name.Name
 				} else {
 					naked := strings.Trim(s.Path.Value, `"`)
 					parts := strings.Split(naked, "/")
-					theImport = parts[len(parts)-1]
+					sorterImport = parts[len(parts)-1]
 				}
 			}
 		}
 
-		if theImport != "" {
-			files[f] = theImport
+		if sorterImport != "" {
+			files[f] = sorterImport
 		}
 	}
 
@@ -205,33 +216,60 @@ func getMatchesForPkg(dir string, goFile string, goPkg string) (map[string]fileM
 
 		sort.Sort(sort.StringSlice(fileList))
 
-		if fileList[0] != goFile {
-			return nil, NotFirstFile
+		if fileList[0] != envFile {
+			return nil, errNotFirstFile
 		}
 	}
 
 	realRes := make(map[string]fileMatches)
 
 	for f, theImport := range files {
-		res, err := getMatchesFromFile(f, fset, theImport, goPkg)
+		matches, err := getMatchesFromFile(f, fset, theImport, envPkg)
 		if err != nil {
 			return nil, err
 		}
 
-		typeMap := make(map[string][]string)
+		var funs []sortFunToGen
 		importMap := make(map[string]bool)
 
 		// we need to union the list of functions
-		for typ, fns := range res {
-			// TODO we need to do more here... because we need to work out
-			// whether there should be additional imports in the generated
-			// files
+		for _, match := range matches {
 			var buf bytes.Buffer
-			printer.Fprint(&buf, fset, typ)
+
+			err := printer.Fprint(&buf, fset, match.orderTyp)
+			if err != nil {
+				// TODO
+				panic(err)
+			}
+
 			sliceIdent := buf.String()
 
+			recv := ""
+			recvVar := ""
+
+			if match.fun.Recv != nil {
+				var buf bytes.Buffer
+
+				// we know at this point we have a valid method...
+				recvVar = match.fun.Recv.List[0].Names[0].Name
+
+				buf.WriteString("(")
+				buf.WriteString(recvVar)
+
+				// TODO should handle error here because it's not stated the
+				// print only supports type X, it's implementation detail
+				err := printer.Fprint(&buf, fset, match.fun.Recv.List[0].Type)
+				if err != nil {
+					panic(err)
+				}
+
+				buf.WriteString(")")
+
+				recv = buf.String()
+			}
+
 			// we need to calculate the required imports
-			importMatches := findImports(typ, f.Imports)
+			importMatches := findImports(match.orderTyp, f.Imports)
 
 			for i := range importMatches {
 				importName := i.Path.Value
@@ -242,30 +280,37 @@ func getMatchesForPkg(dir string, goFile string, goPkg string) (map[string]fileM
 				importMap[importName] = true
 			}
 
-			if typFns, ok := typeMap[sliceIdent]; ok {
-				typFns = append(typFns, fns...)
-				typeMap[sliceIdent] = typFns
-			} else {
-				typeMap[sliceIdent] = fns
-			}
+			funs = append(funs, sortFunToGen{
+				name:    match.fun.Name.Name,
+				typ:     sliceIdent,
+				recv:    recv,
+				recvVar: recvVar,
+			})
 		}
 
 		fileName := fset.Position(f.Pos()).Filename
 		basename := strings.TrimSuffix(filepath.Base(fileName), ".go")
 
-		matches := fileMatches{
-			funs:    typeMap,
+		realRes[basename] = fileMatches{
+			funs:    funs,
 			imports: importMap,
 		}
-
-		realRes[basename] = matches
 	}
 
 	return realRes, nil
 }
 
-func getMatchesFromFile(f *ast.File, fset *token.FileSet, theImport string, goPkg string) (map[ast.Expr][]string, error) {
-	matches := make(map[ast.Expr][]string)
+type match struct {
+	// the actual function/method that has matched
+	fun *ast.FuncDecl
+
+	// the "type" of the slice parameter (the first one); i.e.
+	// the expression that appears after the '[]'
+	orderTyp ast.Expr
+}
+
+func getMatchesFromFile(f *ast.File, fset *token.FileSet, theImport string, goPkg string) ([]match, error) {
+	var matches []match
 
 Decls:
 	for _, d := range f.Decls {
@@ -276,7 +321,7 @@ Decls:
 
 		fn := fun.Name.Name
 
-		if !OrderFunctionRegex.MatchString(fn) {
+		if !_OrderFunctionRegex.MatchString(fn) {
 			continue
 		}
 
@@ -298,7 +343,7 @@ Decls:
 			continue
 		}
 
-		if typ.Sel.Name != SorterOrderTypeName {
+		if typ.Sel.Name != _SorterOrderTypeName {
 			continue
 		}
 
@@ -307,7 +352,7 @@ Decls:
 		}
 
 		// we need to gather the number of params....
-		paramList := make([]ast.Expr, 0)
+		var paramList []ast.Expr
 		for _, f := range fun.Type.Params.List {
 			for _ = range f.Names {
 				paramList = append(paramList, f.Type)
@@ -329,12 +374,10 @@ Decls:
 			}
 		}
 
-		funs, ok := matches[at.Elt]
-		if !ok {
-			funs = make([]string, 0)
-		}
-		funs = append(funs, fun.Name.Name)
-		matches[at.Elt] = funs
+		matches = append(matches, match{
+			fun:      fun,
+			orderTyp: at.Elt,
+		})
 	}
 
 	return matches, nil
@@ -342,45 +385,48 @@ Decls:
 
 // TODO add support for
 //
-// 1. support slices of imported types (would mean match.typ could be different)
-// 2. support for orderers with errors?
+// 1. support for orderers with errors?
 
 func genMatches(matches map[string]fileMatches, pkg string, path string) error {
-	for typ, funs := range matches {
-		name := "gen_" + typ + "_sorter.go"
+	for file, fm := range matches {
+		name := "gen_" + file + "_sorter.go"
 		ofName := filepath.Join(path, name)
 
 		out := bytes.NewBuffer([]byte(`package ` + pkg + `
 
 		import "sort"
-		import "github.com/myitcv/sorter"
+		import "` + _SorterPackage + `"
 
 		`))
 
-		for i := range funs.imports {
+		for i := range fm.imports {
 			fmt.Fprintln(out, "import", i)
 		}
 
-		for typ, funs := range funs.funs {
-			for _, fun := range funs {
-				sortName := sortFunction(fun)
+		for _, toGen := range fm.funs {
+			sortName := sortFunction(toGen.name)
 
-				fmt.Fprint(out, `
-				func `+sortName+`(vs []`+typ+`) {
-					sort.Sort(&sorter.Wrapper{
-						LenFunc: func() int {
-							return len(vs)
-						},
-						LessFunc: func(i, j int) bool {
-							return bool(`+fun+`(vs, i, j))
-						},
-						SwapFunc: func(i, j int) {
-							vs[i], vs[j] = vs[j], vs[i]
-						},
-					})
-				}
-				`)
+			x := ""
+
+			if toGen.recv != "" {
+				x = toGen.recvVar + "."
 			}
+
+			fmt.Fprint(out, `
+			func `+toGen.recv+` `+sortName+`(vs []`+toGen.typ+`) {
+				sort.Sort(&sorter.Wrapper{
+					LenFunc: func() int {
+						return len(vs)
+					},
+					LessFunc: func(i, j int) bool {
+						return bool(`+x+toGen.name+`(vs, i, j))
+					},
+					SwapFunc: func(i, j int) {
+						vs[i], vs[j] = vs[j], vs[i]
+					},
+				})
+			}
+			`)
 		}
 
 		toWrite := out.Bytes()
@@ -411,29 +457,20 @@ func sortFunction(orderFn string) string {
 	lower := false
 	split := ""
 
-	if strings.HasPrefix(orderFn, UpperOrder) {
-		split = UpperOrder
+	if strings.HasPrefix(orderFn, _UpperOrder) {
+		split = _UpperOrder
 	} else {
 		lower = true
-		split = LowerOrder
+		split = _LowerOrder
 	}
 
 	parts := strings.SplitAfterN(orderFn, split, 2)
 
 	if lower {
 		return "sort" + parts[1]
-	} else {
-		return "Sort" + parts[1]
 	}
-}
 
-func typeStringToFileName(s string) string {
-	// safely translate to a filename
-	res := s
-	res = strings.Replace(res, "[]", "sl_", -1)
-	res = strings.Replace(res, "*", "p_", -1)
-
-	return InvalidFileChar.ReplaceAllString(res, "_")
+	return "Sort" + parts[1]
 }
 
 type importFinder struct {

@@ -54,3 +54,9 @@ func orderBufferByContents(buffers []bytes.Buffer, i int, j int) sorter.Ordered 
 func orderMap(buffers []map[string]bool, i int, j int) sorter.Ordered {
 	return true
 }
+
+type example struct{}
+
+func (e *example) orderBanana(s []string, i, j int) sorter.Ordered {
+	return s[i] < s[j]
+}

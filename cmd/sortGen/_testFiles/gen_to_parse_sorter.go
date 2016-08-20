@@ -60,3 +60,17 @@ func sortMap(vs []map[string]bool) {
 		},
 	})
 }
+
+func (e *example) sortBanana(vs []string) {
+	sort.Sort(&sorter.Wrapper{
+		LenFunc: func() int {
+			return len(vs)
+		},
+		LessFunc: func(i, j int) bool {
+			return bool(e.orderBanana(vs, i, j))
+		},
+		SwapFunc: func(i, j int) {
+			vs[i], vs[j] = vs[j], vs[i]
+		},
+	})
+}

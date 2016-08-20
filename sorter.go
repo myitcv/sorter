@@ -3,19 +3,17 @@
 
 package sorter
 
+// Inspired by https://github.com/mattn/sorter
+
+// Ordered is a named type used to help identify order functions. See sortGen
+// for more details
 type Ordered bool
 
-// Inspired by https://github.com/mattn/sorter
-type (
-	FLen  func() int
-	FLess func(i, j int) bool
-	FSwap func(i, j int)
-)
-
+// Wrapper is a light wrapper to faciliate calls to sort.Sort
 type Wrapper struct {
-	LenFunc  FLen
-	LessFunc FLess
-	SwapFunc FSwap
+	LenFunc  func() int
+	LessFunc func(i, j int) bool
+	SwapFunc func(i, j int)
 }
 
 func (w *Wrapper) Len() int {
