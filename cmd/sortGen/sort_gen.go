@@ -4,14 +4,17 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -44,6 +47,8 @@ var _LowerOrder string
 var _UpperOrder string
 var _InvalidFileChar *regexp.Regexp
 
+var fLicenseFile = flag.String("licenseFile", "", "file containing an uncommented license header")
+
 var errNotFirstFile = errors.New("Not first go generate file")
 
 func init() {
@@ -69,6 +74,8 @@ func init() {
 }
 
 func main() {
+	flag.Parse()
+
 	goFile, ok := os.LookupEnv(_GoFile)
 	if !ok {
 		panic("Env not correct; missing " + _GoFile)
@@ -82,6 +89,17 @@ func main() {
 	wd, err := os.Getwd()
 	if err != nil {
 		panic(err)
+	}
+
+	var licenseFile *os.File
+
+	if *fLicenseFile != "" {
+		lf, err := os.Open(*fLicenseFile)
+		if err != nil {
+			panic(err)
+		}
+
+		licenseFile = lf
 	}
 
 	matches, err := getMatchesForPkg(wd, goFile, goPkg)
@@ -101,7 +119,7 @@ func main() {
 		panic(err)
 	}
 
-	err = genMatches(matches, goPkg, wd)
+	err = genMatches(matches, goPkg, wd, licenseFile)
 	if err != nil {
 		panic(err)
 	}
@@ -387,17 +405,21 @@ Decls:
 //
 // 1. support for orderers with errors?
 
-func genMatches(matches map[string]fileMatches, pkg string, path string) error {
+func genMatches(matches map[string]fileMatches, pkg string, path string, licenseFile io.Reader) error {
 	for file, fm := range matches {
 		name := "gen_" + file + "_sorter.go"
 		ofName := filepath.Join(path, name)
 
-		out := bytes.NewBuffer([]byte(`package ` + pkg + `
+		out := bytes.NewBuffer(nil)
+
+		commentAndWriteLicense(out, licenseFile)
+
+		out.WriteString(`package ` + pkg + `
 
 		import "sort"
 		import "` + _SorterPackage + `"
 
-		`))
+		`)
 
 		for i := range fm.imports {
 			fmt.Fprintln(out, "import", i)
@@ -511,4 +533,29 @@ func findImports(exp ast.Expr, imports []*ast.ImportSpec) map[*ast.ImportSpec]bo
 	ast.Walk(finder, exp)
 
 	return finder.matches
+}
+
+func commentAndWriteLicense(dst io.Writer, licenseFile io.Reader) error {
+
+	lastLineEmpty := false
+	scanner := bufio.NewScanner(licenseFile)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			lastLineEmpty = true
+		}
+		fmt.Fprintln(dst, "//", line)
+	}
+
+	// ensure we have a space before package
+	if !lastLineEmpty {
+		fmt.Fprintln(dst)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	return nil
 }

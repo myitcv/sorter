@@ -1,7 +1,8 @@
 // Copyright (c) 2016 Paul Jolly <paul@myitcv.org.uk>, all rights reserved.
 // Use of this document is governed by a license found in the LICENSE document.
 
-//go:generate sortGen
+//go:generate sortGen -licenseFile license_header.txt
+
 package main
 
 import (
