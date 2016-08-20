@@ -64,7 +64,8 @@ func main() {
 
 	fmt.Printf("Name sorted: %v\n", people)
 
-	sortByAge(people)
+	m := &myStruct{}
+	m.sortByAge(people)
 
 	fmt.Printf("Age sorted: %v\n", people)
 }
@@ -73,7 +74,11 @@ func orderByName(persons []person, i, j int) sorter.Ordered {
 	return persons[i].name < persons[j].name
 }
 
-func orderByAge(persons []person, i, j int) sorter.Ordered {
+type myStruct struct {
+	// some fields
+}
+
+func (m *myStruct) orderByAge(persons []person, i, j int) sorter.Ordered {
 	return persons[i].age < persons[j].age
 }
 ```
