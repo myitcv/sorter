@@ -93,17 +93,20 @@ Examine the contents of `gen_main_sorter.go` to see the generated functions.
 
 ### Rules
 
-`sortGen` generates sort functions according to the following simple rules:
+`sortGen` generates sort functions/methods according to the following simple rules:
 
-1. The file, e.g. `my_file.go`, containing the order function must include the directive `//go:generate sortGen`
-2. The order function name must be of the form `"order*"` or `"Order*"` (more strictly `^[oO]rder[[:word:]]+` in a [regex](https://godoc.org/regexp)
+1. The file, e.g. `my_file.go`, containing the order function/method must include the directive `//go:generate sortGen`
+2. The order function/method name must be of the form `"order*"` or `"Order*"` (more strictly `^[oO]rder[[:word:]]+` in a [regex](https://godoc.org/regexp)
    [pattern](https://github.com/google/re2/wiki/Syntax))
-3. The parameters of the order function must be a slice type, followed by two `int`'s
+3. The parameters of the order function/method must be a slice type, followed by two `int`'s
 4. The return type must be `github.com/myitcv/sorter.Ordered`
 
-The sort functions generated will be of the form `"sort*"` or `"Sort*"` (following the capitalisation
+The sort functions/methods generated will be of the form `"sort*"` or `"Sort*"` (following the capitalisation
 of the order function). They will be written to a file with a name corresponding to the input file,
 `gen_my_file_sorter.go` in the case of the file mentioned in point 1.
+
+Notice the use of the term "function/method"; if the order function defines a receiver (i.e. it is a method)
+then the generated sort function will use the same receiver, and hence be a method.
 
 ### Implementation
 
