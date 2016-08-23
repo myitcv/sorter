@@ -14,7 +14,6 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -91,17 +90,6 @@ func main() {
 		panic(err)
 	}
 
-	var licenseFile *os.File
-
-	if *fLicenseFile != "" {
-		lf, err := os.Open(*fLicenseFile)
-		if err != nil {
-			panic(err)
-		}
-
-		licenseFile = lf
-	}
-
 	matches, err := getMatchesForPkg(wd, goFile, goPkg)
 	if err != nil {
 		if err == errNotFirstFile {
@@ -119,7 +107,7 @@ func main() {
 		panic(err)
 	}
 
-	err = genMatches(matches, goPkg, wd, licenseFile)
+	err = genMatches(matches, goPkg, wd, *fLicenseFile)
 	if err != nil {
 		panic(err)
 	}
@@ -405,14 +393,20 @@ Decls:
 //
 // 1. support for orderers with errors?
 
-func genMatches(matches map[string]fileMatches, pkg string, path string, licenseFile io.Reader) error {
+func genMatches(matches map[string]fileMatches, pkg string, path string, licenseFile string) error {
+
+	license, err := commentLicense(licenseFile)
+	if err != nil {
+		return err
+	}
+
 	for file, fm := range matches {
 		name := "gen_" + file + "_sorter.go"
 		ofName := filepath.Join(path, name)
 
 		out := bytes.NewBuffer(nil)
 
-		commentAndWriteLicense(out, licenseFile)
+		out.WriteString(license)
 
 		out.WriteString(`package ` + pkg + `
 
@@ -535,27 +529,38 @@ func findImports(exp ast.Expr, imports []*ast.ImportSpec) map[*ast.ImportSpec]bo
 	return finder.matches
 }
 
-func commentAndWriteLicense(dst io.Writer, licenseFile io.Reader) error {
+func commentLicense(licenseFile string) (string, error) {
+	if licenseFile == "" {
+		return "", nil
+	}
+
+	file, err := os.Open(licenseFile)
+	if err != nil {
+		return "", err
+	}
+
+	res := ""
 
 	lastLineEmpty := false
-	scanner := bufio.NewScanner(licenseFile)
+	scanner := bufio.NewScanner(file)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			lastLineEmpty = true
 		}
-		fmt.Fprintln(dst, "//", line)
+		res = res + fmt.Sprintln("//", line)
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("License file %v, %v\n", licenseFile, err)
+		return "", err
 	}
 
 	// ensure we have a space before package
 	if !lastLineEmpty {
-		fmt.Fprintln(dst)
+		res = res + "\n"
 	}
 
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	return nil
+	return res, nil
 }

@@ -4,7 +4,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -36,9 +35,19 @@ func TestBasic(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	license := bytes.NewBuffer([]byte("My favourite license"))
+	tmpLicenseFileFi, err := ioutil.TempFile(os.TempDir(), "sortGet_tempLicenseFile")
+	if err != nil {
+		panic(err)
+	}
 
-	err = genMatches(matches, "main", tmpDir, license)
+	_, err = tmpLicenseFileFi.WriteString("My favourite license")
+	if err != nil {
+		panic(err)
+	}
+
+	tmpLicenseFileFi.Close()
+
+	err = genMatches(matches, "main", tmpDir, tmpLicenseFileFi.Name())
 
 	if err != nil {
 		t.Fatalf("Expected gen err to be nil, got %v", err)
