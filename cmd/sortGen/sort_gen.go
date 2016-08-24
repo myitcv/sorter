@@ -107,7 +107,18 @@ func main() {
 		panic(err)
 	}
 
-	err = genMatches(matches, envPkg, wd, *fLicenseFile)
+	licenseHeader := ""
+
+	if *fLicenseFile != "" {
+		byts, err := ioutil.ReadFile(*fLicenseFile)
+		if err != nil {
+			panic(err)
+		}
+
+		licenseHeader = string(byts)
+	}
+
+	err = genMatches(matches, envPkg, wd, licenseHeader)
 	if err != nil {
 		panic(err)
 	}
@@ -393,12 +404,9 @@ Decls:
 //
 // 1. support for orderers with errors?
 
-func genMatches(matches map[string]fileMatches, pkg string, path string, licenseFile string) error {
+func genMatches(matches map[string]fileMatches, pkg string, path string, licenseHeader string) error {
 
-	license, err := commentLicense(licenseFile)
-	if err != nil {
-		return err
-	}
+	license := commentString(licenseHeader)
 
 	for file, fm := range matches {
 		name := "gen_" + file + "_sorter.go"
@@ -576,4 +584,33 @@ func commentLicense(licenseFile string) (string, error) {
 	}
 
 	return res, nil
+}
+
+func commentString(r string) string {
+	res := ""
+
+	buf := bytes.NewBuffer([]byte(r))
+
+	lastLineEmpty := false
+	scanner := bufio.NewScanner(buf)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			lastLineEmpty = true
+		}
+		res = res + fmt.Sprintln("//", line)
+	}
+
+	if err := scanner.Err(); err != nil {
+		// this really would be exceptional... because we passed in a string
+		panic(err)
+	}
+
+	// ensure we have a space before package
+	if !lastLineEmpty {
+		res = res + "\n"
+	}
+
+	return res
 }
