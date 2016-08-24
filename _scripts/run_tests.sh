@@ -5,7 +5,9 @@
 
 set -e
 
-go generate
+set -v
+
+go generate ./...
 go vet ./...
 
 # no tests to run here...
