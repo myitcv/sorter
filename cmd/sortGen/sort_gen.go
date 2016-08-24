@@ -22,6 +22,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/myitcv/sorter/gen"
 )
 
 const (
@@ -31,10 +33,8 @@ const (
 
 	_SorterOrderTypeName = "Ordered"
 
-	_GoFile        = "GOFILE"
-	_GoPackage     = "GOPACKAGE"
-	_GenFilePrefix = "gen_"
-	_GenFileSuffix = "_sorter.go"
+	goFileEnv = "GOFILE"
+	goPkgEnv  = "GOPACKAGE"
 
 	// TODO shouldn't hard-code this to sortGen, should use os.Arg(0)?
 	_GoGenPattern = `^//go:generate +sortGen`
@@ -75,14 +75,14 @@ func init() {
 func main() {
 	flag.Parse()
 
-	goFile, ok := os.LookupEnv(_GoFile)
+	envFile, ok := os.LookupEnv(goFileEnv)
 	if !ok {
-		panic("Env not correct; missing " + _GoFile)
+		panic("Env not correct; missing " + goFileEnv)
 	}
 
-	goPkg, ok := os.LookupEnv(_GoPackage)
+	envPkg, ok := os.LookupEnv(goPkgEnv)
 	if !ok {
-		panic("Env not correct; missing " + _GoPackage)
+		panic("Env not correct; missing " + goPkgEnv)
 	}
 
 	wd, err := os.Getwd()
@@ -90,7 +90,7 @@ func main() {
 		panic(err)
 	}
 
-	matches, err := getMatchesForPkg(wd, goFile, goPkg)
+	matches, err := getMatchesForPkg(wd, envFile, envPkg)
 	if err != nil {
 		if err == errNotFirstFile {
 			return
@@ -107,7 +107,7 @@ func main() {
 		panic(err)
 	}
 
-	err = genMatches(matches, goPkg, wd, *fLicenseFile)
+	err = genMatches(matches, envPkg, wd, *fLicenseFile)
 	if err != nil {
 		panic(err)
 	}
@@ -133,7 +133,7 @@ func removeGeneratedFiles(dir string) error {
 
 func fileNotGenerated(file os.FileInfo) bool {
 	fn := file.Name()
-	return !strings.HasPrefix(fn, _GenFilePrefix) || !strings.HasSuffix(fn, _GenFileSuffix)
+	return !strings.HasPrefix(fn, gen.GenFilePrefix) || !strings.HasSuffix(fn, gen.GenFileSuffix)
 }
 
 type fileMatches struct {
