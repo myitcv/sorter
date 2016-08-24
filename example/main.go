@@ -18,7 +18,7 @@ type person struct {
 
 func main() {
 	people := []person{
-		person{"Sarah", 60},
+		person{"Sarah", 25},
 		person{"Jill", 34},
 		person{"Paul", 25},
 	}
@@ -30,7 +30,7 @@ func main() {
 	fmt.Printf("Name sorted: %v\n", people)
 
 	m := &myStruct{}
-	m.sortByAge(people)
+	m.stableSortByAge(people)
 
 	fmt.Printf("Age sorted: %v\n", people)
 }

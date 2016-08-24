@@ -14,12 +14,16 @@ func orderByName(persons []person, i, j int) sorter.Ordered {
 }
 ```
 
-then run `go generate` and a corresponding sort function will have been generated for you:
+then run `go generate` and corresponding sort functions will have been generated for you:
 
 ```go
 // gen_main_sorter.go
 
 func sortByName(vs []person) {
+	...
+}
+
+func stableSortByName(vs []person) {
 	...
 }
 ```
@@ -54,7 +58,7 @@ type person struct {
 
 func main() {
 	people := []person{
-		person{"Sarah", 60},
+		person{"Sarah", 25},
 		person{"Jill", 34},
 		person{"Paul", 25},
 	}
@@ -66,7 +70,7 @@ func main() {
 	fmt.Printf("Name sorted: %v\n", people)
 
 	m := &myStruct{}
-	m.sortByAge(people)
+	m.stableSortByAge(people)
 
 	fmt.Printf("Age sorted: %v\n", people)
 }
@@ -90,9 +94,9 @@ Then:
 $ go generate
 $ go build
 $ ./example
-Before: [{Sarah 60} {Jill 34} {Paul 25}]
-Name sorted: [{Jill 34} {Paul 25} {Sarah 60}]
-Age sorted: [{Paul 25} {Jill 34} {Sarah 60}]
+Before: [{Sarah 25} {Jill 34} {Paul 25}]
+Name sorted: [{Jill 34} {Paul 25} {Sarah 25}]
+Age sorted: [{Paul 25} {Sarah 25} {Jill 34}]
 ```
 
 Examine the contents of [`gen_main_sorter.go`](https://github.com/myitcv/sorter/blob/master/example/gen_main_sorter.go) to see the generated functions.
@@ -104,7 +108,7 @@ to be included (commented) at the top of each generated file
 
 ### Rules
 
-`sortGen` generates sort functions/methods according to the following simple rules:
+`sortGen` generates sort and stable sort functions/methods according to the following simple rules:
 
 1. The file, e.g. `my_file.go`, containing the order function/method must include the directive `//go:generate sortGen`
 2. The order function/method name must be of the form `"order*"` or `"Order*"` (more strictly `^[oO]rder[[:word:]]+` in a [regex](https://godoc.org/regexp)
@@ -112,16 +116,16 @@ to be included (commented) at the top of each generated file
 3. The parameters of the order function/method must be a slice type, followed by two `int`'s
 4. The return type must be `github.com/myitcv/sorter.Ordered`
 
-The sort functions/methods generated will be of the form `"sort*"` or `"Sort*"` (following the capitalisation
-of the order function). They will be written to a file with a name corresponding to the input file,
-`gen_my_file_sorter.go` in the case of the file mentioned in point 1.
+The sort functions/methods generated will be of the form `"sort*"` or `"Sort*"` and `"stableSort*"` or `"StableSort*"`
+(following the capitalisation of the order function). They will be written to a file with a name corresponding to the
+input file, `gen_my_file_sorter.go` in the case of the file mentioned in point 1.
 
 Notice the use of the term "function/method"; if the order function defines a receiver (i.e. it is a method)
-then the generated sort function will use the same receiver, and hence be a method.
+then the generated sort (and stable sort) function will use the same receiver, and hence be a method.
 
 ### Implementation
 
-The current implementation of the generator simply wraps a call to `sort.Sort`; this of course can be improved...
+The current implementation of the generator simply wraps a call to `sort.Sort` (or `sort.Stable`); this of course can be improved...
 
 ### Bugs
 

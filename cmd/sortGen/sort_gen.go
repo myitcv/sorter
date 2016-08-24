@@ -420,7 +420,7 @@ func genMatches(matches map[string]fileMatches, pkg string, path string, license
 		}
 
 		for _, toGen := range fm.funs {
-			sortName := sortFunction(toGen.name)
+			sortName, stableName := sortFunctions(toGen.name)
 
 			x := ""
 
@@ -430,6 +430,19 @@ func genMatches(matches map[string]fileMatches, pkg string, path string, license
 
 			fmt.Fprint(out, `
 			func `+toGen.recv+` `+sortName+`(vs []`+toGen.typ+`) {
+				sort.Sort(&sorter.Wrapper{
+					LenFunc: func() int {
+						return len(vs)
+					},
+					LessFunc: func(i, j int) bool {
+						return bool(`+x+toGen.name+`(vs, i, j))
+					},
+					SwapFunc: func(i, j int) {
+						vs[i], vs[j] = vs[j], vs[i]
+					},
+				})
+			}
+			func `+toGen.recv+` `+stableName+`(vs []`+toGen.typ+`) {
 				sort.Sort(&sorter.Wrapper{
 					LenFunc: func() int {
 						return len(vs)
@@ -467,7 +480,7 @@ func genMatches(matches map[string]fileMatches, pkg string, path string, license
 	return nil
 }
 
-func sortFunction(orderFn string) string {
+func sortFunctions(orderFn string) (string, string) {
 	// TODO this can be improved
 
 	lower := false
@@ -483,10 +496,10 @@ func sortFunction(orderFn string) string {
 	parts := strings.SplitAfterN(orderFn, split, 2)
 
 	if lower {
-		return "sort" + parts[1]
+		return "sort" + parts[1], "stableSort" + parts[1]
 	}
 
-	return "Sort" + parts[1]
+	return "Sort" + parts[1], "StableSort" + parts[1]
 }
 
 type importFinder struct {

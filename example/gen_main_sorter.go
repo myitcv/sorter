@@ -19,8 +19,34 @@ func sortByName(vs []person) {
 		},
 	})
 }
+func stableSortByName(vs []person) {
+	sort.Sort(&sorter.Wrapper{
+		LenFunc: func() int {
+			return len(vs)
+		},
+		LessFunc: func(i, j int) bool {
+			return bool(orderByName(vs, i, j))
+		},
+		SwapFunc: func(i, j int) {
+			vs[i], vs[j] = vs[j], vs[i]
+		},
+	})
+}
 
 func (m *myStruct) sortByAge(vs []person) {
+	sort.Sort(&sorter.Wrapper{
+		LenFunc: func() int {
+			return len(vs)
+		},
+		LessFunc: func(i, j int) bool {
+			return bool(m.orderByAge(vs, i, j))
+		},
+		SwapFunc: func(i, j int) {
+			vs[i], vs[j] = vs[j], vs[i]
+		},
+	})
+}
+func (m *myStruct) stableSortByAge(vs []person) {
 	sort.Sort(&sorter.Wrapper{
 		LenFunc: func() int {
 			return len(vs)
