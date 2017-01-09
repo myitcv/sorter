@@ -46,7 +46,17 @@ var _LowerOrder string
 var _UpperOrder string
 var _InvalidFileChar *regexp.Regexp
 
-var fLicenseFile = flag.String("licenseFile", "", "file containing an uncommented license header")
+var (
+	fLicenseFile = flag.String("licenseFile", "", "file containing an uncommented license header")
+	fGoGenLog    = flag.String("gglog", "fatal", "log level; one of info, warning, error, fatal")
+)
+
+const (
+	LogInfo    = "info"
+	LogWarning = "warning"
+	LogError   = "error"
+	LogFatal   = "fatal"
+)
 
 var errNotFirstFile = errors.New("Not first go generate file")
 
@@ -74,6 +84,12 @@ func init() {
 
 func main() {
 	flag.Parse()
+
+	if *fGoGenLog == "" {
+		*fGoGenLog = LogFatal
+	}
+
+	fmt.Printf("sortGen os.Args: %v, %#v", len(os.Args), os.Args)
 
 	envFile, ok := os.LookupEnv(goFileEnv)
 	if !ok {
@@ -409,7 +425,7 @@ func genMatches(matches map[string]fileMatches, pkg string, path string, license
 	license := commentString(licenseHeader)
 
 	for file, fm := range matches {
-		name := "gen_" + file + "_sorter.go"
+		name := "gen_" + file + ".sortGen.go"
 		ofName := filepath.Join(path, name)
 
 		out := bytes.NewBuffer(nil)
