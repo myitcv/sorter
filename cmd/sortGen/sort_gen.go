@@ -23,6 +23,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/myitcv/gogenerate"
 	"github.com/myitcv/sorter/gen"
 )
 
@@ -48,14 +49,7 @@ var _InvalidFileChar *regexp.Regexp
 
 var (
 	fLicenseFile = flag.String("licenseFile", "", "file containing an uncommented license header")
-	fGoGenLog    = flag.String("gglog", "fatal", "log level; one of info, warning, error, fatal")
-)
-
-const (
-	LogInfo    = "info"
-	LogWarning = "warning"
-	LogError   = "error"
-	LogFatal   = "fatal"
+	fGoGenLog    = gogenerate.LogFlag()
 )
 
 var errNotFirstFile = errors.New("Not first go generate file")
@@ -86,7 +80,7 @@ func main() {
 	flag.Parse()
 
 	if *fGoGenLog == "" {
-		*fGoGenLog = LogFatal
+		*fGoGenLog = gogenerate.LogFatal
 	}
 
 	fmt.Printf("sortGen os.Args: %v, %#v", len(os.Args), os.Args)
