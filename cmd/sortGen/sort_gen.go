@@ -83,8 +83,6 @@ func main() {
 		*fGoGenLog = gogenerate.LogFatal
 	}
 
-	fmt.Printf("sortGen os.Args: %v, %#v", len(os.Args), os.Args)
-
 	envFile, ok := os.LookupEnv(goFileEnv)
 	if !ok {
 		panic("Env not correct; missing " + goFileEnv)
