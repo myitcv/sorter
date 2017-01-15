@@ -12,18 +12,18 @@ import (
 )
 
 func TestBasic(t *testing.T) {
-	matches, err := getMatchesForPkg("_testFiles/", "to_parse.go", "main")
+	fileMatches := getMatchesForPkg("_testFiles/", "to_parse.go", "main")
 
-	if err != nil {
-		t.Fatalf("Expected err to be nil, got %v", err)
+	for k, v := range fileMatches {
+		fmt.Printf("%v: %v\n", k, v)
 	}
 
 	// number of types matched
-	if len(matches) != 2 {
-		t.Fatalf("We got %v matches instead of 2", len(matches))
+	if len(fileMatches) != 2 {
+		t.Fatalf("We got %v matches instead of 2", len(fileMatches))
 	}
 
-	funs := matches["to_parse"]
+	funs := fileMatches["_testFiles/to_parse.go"]
 
 	if len(funs.funs) != 5 {
 		t.Fatalf("We got %v function matches instead of 5", len(funs.funs))
@@ -47,7 +47,7 @@ func TestBasic(t *testing.T) {
 
 	tmpLicenseFileFi.Close()
 
-	err = genMatches(matches, "main", tmpDir, tmpLicenseFileFi.Name())
+	genMatches(fileMatches, "main", tmpDir, tmpLicenseFileFi.Name())
 
 	if err != nil {
 		t.Fatalf("Expected gen err to be nil, got %v", err)

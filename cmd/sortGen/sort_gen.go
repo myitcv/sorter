@@ -6,153 +6,119 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"go/ast"
-	"go/format"
 	"go/parser"
 	"go/printer"
 	"go/token"
-	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/tools/imports"
+
 	"github.com/myitcv/gogenerate"
-	"github.com/myitcv/sorter/gen"
+	"github.com/myitcv/sorter"
 )
 
 const (
-	_SorterPackage = "github.com/myitcv/sorter"
-
-	_OrderPrefix = "order"
-
-	_SorterOrderTypeName = "Ordered"
-
-	goFileEnv = "GOFILE"
-	goPkgEnv  = "GOPACKAGE"
-
-	// TODO shouldn't hard-code this to sortGen, should use os.Arg(0)?
-	_GoGenPattern = `^//go:generate +sortGen`
+	sortGenCmd  = "sortGen"
+	orderPrefix = "order"
 )
 
-var _GoGenerateRegex *regexp.Regexp
-var _OrderFunctionRegex *regexp.Regexp
-var _LowerOrder string
-var _UpperOrder string
-var _InvalidFileChar *regexp.Regexp
-
+// matching related vars
 var (
-	fLicenseFile = flag.String("licenseFile", "", "file containing an uncommented license header")
+	orderFnRegex    *regexp.Regexp
+	lowerOrder      string
+	upperOrder      string
+	invalidFileChar *regexp.Regexp
+)
+
+// flags
+var (
+	fLicenseFile = gogenerate.LicenseFileFlag()
 	fGoGenLog    = gogenerate.LogFlag()
 )
 
-var errNotFirstFile = errors.New("Not first go generate file")
-
 func init() {
-	r, n := utf8.DecodeRuneInString(_OrderPrefix)
+	r, n := utf8.DecodeRuneInString(orderPrefix)
 	if r == utf8.RuneError {
-		panic("OrderPrefix not a UTF8 string?")
+		fatalf("OrderPrefix not a UTF8 string?")
 	}
 
 	l := string(unicode.ToLower(r))
 	u := string(unicode.ToUpper(r))
 
-	suffix := _OrderPrefix[n:]
+	suffix := orderPrefix[n:]
 
-	_LowerOrder = l + suffix
-	_UpperOrder = u + suffix
+	lowerOrder = l + suffix
+	upperOrder = u + suffix
 
 	orderFunctionPattern := `^[` + l + u + `]` + suffix + `[[:word:]]+`
-	_OrderFunctionRegex = regexp.MustCompile(orderFunctionPattern)
+	orderFnRegex = regexp.MustCompile(orderFunctionPattern)
 
-	_GoGenerateRegex = regexp.MustCompile(_GoGenPattern)
-
-	_InvalidFileChar = regexp.MustCompile(`[[:^word:]]`)
+	invalidFileChar = regexp.MustCompile(`[[:^word:]]`)
 }
 
 func main() {
+	defer func() {
+		err := recover()
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}()
+
+	log.SetFlags(0)
+	log.SetPrefix(sortGenCmd + ": ")
 	flag.Parse()
 
-	if *fGoGenLog == "" {
-		*fGoGenLog = gogenerate.LogFatal
+	gogenerate.DefaultLogLevel(fGoGenLog, gogenerate.LogFatal)
+
+	envFileName, ok := os.LookupEnv(gogenerate.GOFILE)
+	if !ok {
+		fatalf("env not correct; missing %v", gogenerate.GOFILE)
 	}
 
-	envFile, ok := os.LookupEnv(goFileEnv)
+	envPkgName, ok := os.LookupEnv(gogenerate.GOPACKAGE)
 	if !ok {
-		panic("Env not correct; missing " + goFileEnv)
-	}
-
-	envPkg, ok := os.LookupEnv(goPkgEnv)
-	if !ok {
-		panic("Env not correct; missing " + goPkgEnv)
+		fatalf("env not correct; missing %v", gogenerate.GOPACKAGE)
 	}
 
 	wd, err := os.Getwd()
 	if err != nil {
-		panic(err)
+		fatalf("unable to get working directory: %v", err)
 	}
 
-	matches, err := getMatchesForPkg(wd, envFile, envPkg)
+	// are we running against the first file that contains the sortGen directive?
+	// if not return
+	dirFiles, err := gogenerate.FilesContainingCmd(wd, sortGenCmd)
 	if err != nil {
-		if err == errNotFirstFile {
-			return
-		}
-
-		panic(err)
+		fatalf("could not determine if we are the first file: %v", err)
 	}
 
-	// if we get here, we know we are the first file... hence
-	// we can safely delete existing generated files before
-	// generating new ones
-	err = removeGeneratedFiles(wd)
+	if len(dirFiles) == 0 {
+		fatalf("cannot find any files containing the %v directive", sortGenCmd)
+	}
+
+	if envFileName != dirFiles[0] {
+		return
+	}
+
+	// if we get here, we know we are the first file...
+
+	matches := getMatchesForPkg(wd, envPkgName)
+
+	licenseHeader, err := gogenerate.CommentLicenseHeader(fLicenseFile)
 	if err != nil {
-		panic(err)
+		fatalf("could not comment license file: %v", err)
 	}
 
-	licenseHeader := ""
-
-	if *fLicenseFile != "" {
-		byts, err := ioutil.ReadFile(*fLicenseFile)
-		if err != nil {
-			panic(err)
-		}
-
-		licenseHeader = string(byts)
-	}
-
-	err = genMatches(matches, envPkg, wd, licenseHeader)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func removeGeneratedFiles(dir string) error {
-	entries, err := ioutil.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-
-	for _, e := range entries {
-		if !fileNotGenerated(e) {
-			err = os.Remove(filepath.Join(dir, e.Name()))
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func fileNotGenerated(file os.FileInfo) bool {
-	fn := file.Name()
-	return !strings.HasPrefix(fn, gen.GenFilePrefix) || !strings.HasSuffix(fn, gen.GenFileSuffix)
+	genMatches(matches, envPkgName, wd, licenseHeader)
 }
 
 type fileMatches struct {
@@ -169,17 +135,17 @@ type sortFunToGen struct {
 	typ     string
 }
 
-// getMatchesForPkg returns a map[string]fileMatches where the string is the filename where
+// getMatchesForPkg returns a map[string]fileMatches where the string is the file path where
 // the matches were found
-func getMatchesForPkg(path string, envFile string, envPkg string) (map[string]fileMatches, error) {
+func getMatchesForPkg(path string, pkgName string) map[string]fileMatches {
 	fset := token.NewFileSet()
 
-	pkgs, err := parser.ParseDir(fset, path, fileNotGenerated, parser.AllErrors|parser.ParseComments)
+	pkgs, err := parser.ParseDir(fset, path, nil, parser.AllErrors|parser.ParseComments)
 	if err != nil {
-		return nil, err
+		fatalf("could not parse dir %v: %v", path, err)
 	}
 
-	pkg, ok := pkgs[envPkg]
+	pkg, ok := pkgs[pkgName]
 	if !ok {
 		// TODO come up with a proper error strategy
 		panic("Oh dear...")
@@ -187,23 +153,9 @@ func getMatchesForPkg(path string, envFile string, envPkg string) (map[string]fi
 
 	files := make(map[*ast.File]string)
 
-	for _, f := range pkg.Files {
-		cm := ast.NewCommentMap(fset, f, f.Comments)
-
-		foundComment := false
-
-		// if we find a comment that's great
-	FileComments:
-		for _, cg := range cm[f] {
-			for _, com := range cg.List {
-				if _GoGenerateRegex.MatchString(com.Text) {
-					foundComment = true
-					break FileComments
-				}
-			}
-		}
-
-		if !foundComment {
+	for fn, f := range pkg.Files {
+		// we can safely skip files that this generator generated
+		if gogenerate.FileGeneratedBy(fn, sortGenCmd) {
 			continue
 		}
 
@@ -211,7 +163,7 @@ func getMatchesForPkg(path string, envFile string, envPkg string) (map[string]fi
 		sorterImport := ""
 
 		for _, s := range f.Imports {
-			if s.Path.Value == `"`+_SorterPackage+`"` {
+			if s.Path.Value == `"`+sorter.PkgName+`"` {
 				if s.Name != nil {
 					sorterImport = s.Name.Name
 				} else {
@@ -228,31 +180,13 @@ func getMatchesForPkg(path string, envFile string, envPkg string) (map[string]fi
 	}
 
 	if len(files) == 0 {
-		return nil, nil
-	} else if len(files) > 1 {
-		// we need to ascertain whether the file we have been called for
-		// is the first in the list - this logic depends on the defined
-		// behaviour of go generate (see go generate --help)
-		var fileList []string
-		for f := range files {
-			fn := filepath.Base(fset.Position(f.Pos()).Filename)
-			fileList = append(fileList, fn)
-		}
-
-		sort.Sort(sort.StringSlice(fileList))
-
-		if fileList[0] != envFile {
-			return nil, errNotFirstFile
-		}
+		return nil
 	}
 
 	realRes := make(map[string]fileMatches)
 
 	for f, theImport := range files {
-		matches, err := getMatchesFromFile(f, fset, theImport, envPkg)
-		if err != nil {
-			return nil, err
-		}
+		matches := getMatchesFromFile(f, fset, theImport, pkgName)
 
 		var funs []sortFunToGen
 		importMap := make(map[string]bool)
@@ -314,15 +248,16 @@ func getMatchesForPkg(path string, envFile string, envPkg string) (map[string]fi
 		}
 
 		fileName := fset.Position(f.Pos()).Filename
-		basename := strings.TrimSuffix(filepath.Base(fileName), ".go")
 
-		realRes[basename] = fileMatches{
-			funs:    funs,
-			imports: importMap,
+		if len(funs) > 0 {
+			realRes[fileName] = fileMatches{
+				funs:    funs,
+				imports: importMap,
+			}
 		}
 	}
 
-	return realRes, nil
+	return realRes
 }
 
 type match struct {
@@ -334,7 +269,7 @@ type match struct {
 	orderTyp ast.Expr
 }
 
-func getMatchesFromFile(f *ast.File, fset *token.FileSet, theImport string, goPkg string) ([]match, error) {
+func getMatchesFromFile(f *ast.File, fset *token.FileSet, theImport string, goPkg string) []match {
 	var matches []match
 
 Decls:
@@ -346,7 +281,7 @@ Decls:
 
 		fn := fun.Name.Name
 
-		if !_OrderFunctionRegex.MatchString(fn) {
+		if !orderFnRegex.MatchString(fn) {
 			continue
 		}
 
@@ -368,7 +303,7 @@ Decls:
 			continue
 		}
 
-		if typ.Sel.Name != _SorterOrderTypeName {
+		if typ.Sel.Name != sorter.OrderedName {
 			continue
 		}
 
@@ -399,40 +334,48 @@ Decls:
 			}
 		}
 
+		infof("found a match at %v", fset.Position(fun.Pos()))
+
 		matches = append(matches, match{
 			fun:      fun,
 			orderTyp: at.Elt,
 		})
 	}
 
-	return matches, nil
+	return matches
 }
 
-// TODO add support for
-//
-// 1. support for orderers with errors?
+func genMatches(matches map[string]fileMatches, pkg string, path string, licenseHeader string) {
 
-func genMatches(matches map[string]fileMatches, pkg string, path string, licenseHeader string) error {
+	license := licenseHeader
 
-	license := commentString(licenseHeader)
+	// we need to generate one file for non-test matches... and one for test matches
 
-	for file, fm := range matches {
-		name := "gen_" + file + ".sortGen.go"
+	for fn, fm := range matches {
+		buf := bytes.NewBuffer(nil)
+
+		name := filepath.Base(fn)
+
+		if strings.HasSuffix(name, "_test.go") {
+			name = strings.TrimSuffix(name, "_test.go")
+		} else {
+			name = strings.TrimSuffix(name, ".go")
+		}
+
+		name = gogenerate.NameFile(name, sortGenCmd)
 		ofName := filepath.Join(path, name)
 
-		out := bytes.NewBuffer(nil)
+		buf.WriteString(license)
 
-		out.WriteString(license)
+		buf.WriteString(`package ` + pkg + `
 
-		out.WriteString(`package ` + pkg + `
-
-		import "sort"
-		import "` + _SorterPackage + `"
+			import "sort"
+			import "` + sorter.PkgName + `"
 
 		`)
 
 		for i := range fm.imports {
-			fmt.Fprintln(out, "import", i)
+			fmt.Fprintln(buf, "import", i)
 		}
 
 		for _, toGen := range fm.funs {
@@ -444,7 +387,7 @@ func genMatches(matches map[string]fileMatches, pkg string, path string, license
 				x = toGen.recvVar + "."
 			}
 
-			fmt.Fprint(out, `
+			_, err := fmt.Fprint(buf, `
 			func `+toGen.recv+` `+sortName+`(vs []`+toGen.typ+`) {
 				sort.Sort(&sorter.Wrapper{
 					LenFunc: func() int {
@@ -472,28 +415,30 @@ func genMatches(matches map[string]fileMatches, pkg string, path string, license
 				})
 			}
 			`)
+
+			if err != nil {
+				fatalf("unable to print template out: %v", err)
+			}
 		}
 
-		toWrite := out.Bytes()
+		toWrite := buf.Bytes()
 
-		res, err := format.Source(toWrite)
+		res, err := imports.Process(ofName, toWrite, nil)
 		if err == nil {
 			toWrite = res
 		}
 
 		of, err := os.Create(ofName)
 		if err != nil {
-			return err
+			fatalf("unable to create output file %v: %v", fn, err)
 		}
 
 		_, err = of.Write(toWrite)
 		of.Close()
 		if err != nil {
-			return err
+			fatalf("unable to close output file %v: %v", fn, err)
 		}
 	}
-
-	return nil
 }
 
 func sortFunctions(orderFn string) (string, string) {
@@ -502,11 +447,11 @@ func sortFunctions(orderFn string) (string, string) {
 	lower := false
 	split := ""
 
-	if strings.HasPrefix(orderFn, _UpperOrder) {
-		split = _UpperOrder
+	if strings.HasPrefix(orderFn, upperOrder) {
+		split = upperOrder
 	} else {
 		lower = true
-		split = _LowerOrder
+		split = lowerOrder
 	}
 
 	parts := strings.SplitAfterN(orderFn, split, 2)
@@ -558,42 +503,6 @@ func findImports(exp ast.Expr, imports []*ast.ImportSpec) map[*ast.ImportSpec]bo
 	return finder.matches
 }
 
-func commentLicense(licenseFile string) (string, error) {
-	if licenseFile == "" {
-		return "", nil
-	}
-
-	file, err := os.Open(licenseFile)
-	if err != nil {
-		return "", err
-	}
-
-	res := ""
-
-	lastLineEmpty := false
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			lastLineEmpty = true
-		}
-		res = res + fmt.Sprintln("//", line)
-	}
-
-	if err := scanner.Err(); err != nil {
-		fmt.Printf("License file %v, %v\n", licenseFile, err)
-		return "", err
-	}
-
-	// ensure we have a space before package
-	if !lastLineEmpty {
-		res = res + "\n"
-	}
-
-	return res, nil
-}
-
 func commentString(r string) string {
 	res := ""
 
@@ -621,4 +530,20 @@ func commentString(r string) string {
 	}
 
 	return res
+}
+
+func fatalf(format string, args ...interface{}) {
+	panic(fmt.Errorf(format, args...))
+}
+
+func infoln(args ...interface{}) {
+	if *fGoGenLog == string(gogenerate.LogInfo) {
+		log.Println(args...)
+	}
+}
+
+func infof(format string, args ...interface{}) {
+	if *fGoGenLog == string(gogenerate.LogInfo) {
+		log.Printf(format, args...)
+	}
 }
