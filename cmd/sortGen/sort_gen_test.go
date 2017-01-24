@@ -12,7 +12,7 @@ import (
 )
 
 func TestBasic(t *testing.T) {
-	fileMatches := getMatchesForPkg("_testFiles/", "to_parse.go", "main")
+	fileMatches := getMatchesForPkg("_testFiles/", "main")
 
 	for k, v := range fileMatches {
 		fmt.Printf("%v: %v\n", k, v)
