@@ -51,12 +51,14 @@ func orderBufferByContents(buffers []bytes.Buffer, i int, j int) sorter.Ordered 
 	return buffers[i].String() < buffers[j].String()
 }
 
+// MATCH
 func orderMap(buffers []map[string]bool, i int, j int) sorter.Ordered {
 	return true
 }
 
 type example struct{}
 
+// MATCH
 func (e *example) orderBanana(s []string, i, j int) sorter.Ordered {
 	return s[i] < s[j]
 }

@@ -9,6 +9,16 @@ package sorter
 // for more details
 type Ordered bool
 
+const (
+	// OrderedName is the name of the named type above, exposed here so that
+	// generators can safely refer to it without it breaking
+	OrderedName = "Ordered"
+
+	// PkgName is the package to which this definition belongs, again exposed
+	// here for the benefit of generators
+	PkgName = "github.com/myitcv/sorter"
+)
+
 // Wrapper is a light wrapper to faciliate calls to sort.Sort
 type Wrapper struct {
 	LenFunc  func() int
