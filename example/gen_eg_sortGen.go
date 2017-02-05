@@ -22,7 +22,7 @@ func sortByName(vs []person) {
 	})
 }
 func stableSortByName(vs []person) {
-	sort.Sort(&sorter.Wrapper{
+	sort.Stable(&sorter.Wrapper{
 		LenFunc: func() int {
 			return len(vs)
 		},
@@ -34,7 +34,6 @@ func stableSortByName(vs []person) {
 		},
 	})
 }
-
 func (m *myStruct) sortByAge(vs []person) {
 	sort.Sort(&sorter.Wrapper{
 		LenFunc: func() int {
@@ -49,7 +48,7 @@ func (m *myStruct) sortByAge(vs []person) {
 	})
 }
 func (m *myStruct) stableSortByAge(vs []person) {
-	sort.Sort(&sorter.Wrapper{
+	sort.Stable(&sorter.Wrapper{
 		LenFunc: func() int {
 			return len(vs)
 		},

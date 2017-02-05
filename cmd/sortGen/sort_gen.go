@@ -4,17 +4,18 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"flag"
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"html/template"
 	"log"
 	"os"
-	"path/filepath"
+	"path"
 	"regexp"
 	"strings"
 	"unicode"
@@ -23,6 +24,7 @@ import (
 	"golang.org/x/tools/imports"
 
 	"github.com/myitcv/gogenerate"
+	"github.com/myitcv/immutable"
 	"github.com/myitcv/sorter"
 )
 
@@ -70,8 +72,7 @@ func main() {
 	log.SetPrefix(sortGenCmd + ": ")
 
 	defer func() {
-		err := recover()
-		if err != nil {
+		if err, ok := recover().(error); ok {
 			log.Fatalln(err)
 		}
 	}()
@@ -83,11 +84,6 @@ func main() {
 	envFileName, ok := os.LookupEnv(gogenerate.GOFILE)
 	if !ok {
 		fatalf("env not correct; missing %v", gogenerate.GOFILE)
-	}
-
-	envPkgName, ok := os.LookupEnv(gogenerate.GOPACKAGE)
-	if !ok {
-		fatalf("env not correct; missing %v", gogenerate.GOPACKAGE)
 	}
 
 	wd, err := os.Getwd()
@@ -110,171 +106,223 @@ func main() {
 		return
 	}
 
-	// if we get here, we know we are the first file...
-
-	matches := getMatchesForPkg(wd, envPkgName)
-
-	licenseHeader, err := gogenerate.CommentLicenseHeader(fLicenseFile)
+	license, err := gogenerate.CommentLicenseHeader(fLicenseFile)
 	if err != nil {
 		fatalf("could not comment license file: %v", err)
 	}
 
-	genMatches(matches, envPkgName, wd, licenseHeader)
+	// if we get here, we know we are the first file...
+
+	gen(wd, license)
 }
 
-type fileMatches struct {
-	// the string is the import name and quoted path combined
-	imports map[string]bool
-
-	funs []sortFunToGen
-}
-
-type sortFunToGen struct {
-	name    string
-	recv    string
-	recvVar string
-	typ     string
-}
-
-// getMatchesForPkg returns a map[string]fileMatches where the string is the file path where
-// the matches were found
-func getMatchesForPkg(path string, pkgName string) map[string]fileMatches {
-	fset := token.NewFileSet()
-
-	pkgs, err := parser.ParseDir(fset, path, nil, parser.AllErrors|parser.ParseComments)
+func gen(dir, license string) {
+	bpkg, err := build.ImportDir(dir, 0)
 	if err != nil {
-		fatalf("could not parse dir %v: %v", path, err)
+		fatalf("could not load package in dir %v: %v", dir, err)
 	}
 
-	pkg, ok := pkgs[pkgName]
+	g := &generator{
+		pkg:      bpkg,
+		pkgCache: map[string]*build.Package{bpkg.ImportPath: bpkg},
+		typCache: make(map[string]map[string]bool),
+		license:  license,
+	}
+
+	g.fset = token.NewFileSet()
+
+	// do this early
+	g.findImmSlices(g.pkg)
+
+	// we are only interested in scanning the Go and Test Go files in this
+	// package and non-sortGen generated files for sorted templates
+	isGoFile := func(fi os.FileInfo) bool {
+		if gogenerate.FileGeneratedBy(fi.Name(), sortGenCmd) {
+			return false
+		}
+
+		var toCheck []string
+		toCheck = append(toCheck, g.pkg.GoFiles...)
+		toCheck = append(toCheck, g.pkg.TestGoFiles...)
+
+		for _, v := range toCheck {
+			if fi.Name() == v {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	pkgs, err := parser.ParseDir(g.fset, g.pkg.Dir, isGoFile, 0)
+	if err != nil {
+		fatalf("could not parse dir %v: %v", g.pkg.Dir, err)
+	}
+
+	// we are only interested in the package itself, not the exported test package (xtest)
+	pkg, ok := pkgs[g.pkg.Name]
 	if !ok {
-		// TODO come up with a proper error strategy
-		panic("Oh dear...")
+		fatalf("unable to resolve parsed pkg %v", g.pkg.Name)
 	}
 
-	files := make(map[*ast.File]string)
+	for _, f := range pkg.Files {
+		g.buf = bytes.NewBuffer(nil)
+		g.file = f
 
-	for fn, f := range pkg.Files {
-		// we can safely skip files that this generator generated
-		if gogenerate.FileGeneratedBy(fn, sortGenCmd) {
+		matches := g.getMatches()
+
+		if len(matches) == 0 {
 			continue
 		}
 
-		// now see whether it imports the sorter package
-		sorterImport := ""
+		toGen, importMap := g.createToGen(matches)
 
-		for _, s := range f.Imports {
-			if s.Path.Value == `"`+sorter.PkgName+`"` {
-				if s.Name != nil {
-					sorterImport = s.Name.Name
-				} else {
-					naked := strings.Trim(s.Path.Value, `"`)
-					parts := strings.Split(naked, "/")
-					sorterImport = parts[len(parts)-1]
-				}
+		if len(toGen) > 0 {
+			g.genMatches(toGen, importMap)
+		}
+	}
+}
+
+// a generator is the generator for a given package
+type generator struct {
+	// the package in which we are generating
+	pkg *build.Package
+
+	license string
+
+	fset *token.FileSet
+
+	// a cache of build packages that maps a package import path to
+	// its corresponding *build.Package
+	pkgCache map[string]*build.Package
+
+	// a cache within this generator instances that maps
+	// packages import path to the list of immutable slices defined within
+	// that package (that is the type name, not the imm type templ
+	// name)
+	typCache map[string]map[string]bool
+
+	// the current file being analysed
+	file *ast.File
+
+	// current gen output buffer
+	buf *bytes.Buffer
+}
+
+type toGen struct {
+	orderFn string
+	typ     string
+
+	recvVar string
+	recvTyp string
+
+	imm bool
+}
+
+func (g *generator) findImmSlices(bp *build.Package) map[string]bool {
+	fset := token.NewFileSet()
+
+	// we are interested in Go files and test files; we won't get the resolution exactly right here
+	// in the case that someone is referring to a test type outside the package, but the compiler
+	// will catch that case
+	interestFile := func(fi os.FileInfo) bool {
+		var toCheck []string
+		toCheck = append(toCheck, bp.GoFiles...)
+		toCheck = append(toCheck, bp.TestGoFiles...)
+
+		for _, v := range toCheck {
+			if fi.Name() == v {
+				return true
 			}
 		}
 
-		if sorterImport != "" {
-			files[f] = sorterImport
+		return false
+	}
+
+	pkgs, err := parser.ParseDir(fset, bp.Dir, interestFile, 0)
+	if err != nil {
+		fatalf("could not parse package %v in dir %v: %v", bp.ImportPath, bp.Dir, err)
+	}
+
+	pkg, ok := pkgs[bp.Name]
+	if !ok {
+		fatalf("could not resolved parsed package %v in dir %v", bp.Name, bp.Dir)
+	}
+
+	immSlices := make(map[string]bool)
+
+	for _, f := range pkg.Files {
+
+	Decls:
+		for _, d := range f.Decls {
+			gd, ok := d.(*ast.GenDecl)
+			if !ok {
+				continue Decls
+			}
+
+			if gd.Tok != token.TYPE {
+				continue Decls
+			}
+
+		Specs:
+			for _, s := range gd.Specs {
+				ts := s.(*ast.TypeSpec)
+
+				name, isit := immutable.IsImmTmpl(ts)
+
+				if !isit {
+					continue Specs
+				}
+
+				at, ok := ts.Type.(*ast.ArrayType)
+
+				if !ok {
+					continue Specs
+				}
+
+				if at.Len != nil {
+					// it's an array and not a slice
+					continue Specs
+				}
+
+				immSlices[name] = true
+			}
 		}
 	}
 
-	if len(files) == 0 {
+	g.typCache[bp.ImportPath] = immSlices
+
+	return immSlices
+}
+
+// getMatches returns a map[string]fileMatches where the string is the file path where
+// the matches were found
+func (g *generator) getMatches() []match {
+
+	// see whether it imports the sorter package
+	theImport := ""
+
+	for _, s := range g.file.Imports {
+		if s.Path.Value == `"`+sorter.PkgName+`"` {
+			if s.Name != nil {
+				theImport = s.Name.Name
+			} else {
+				naked := strings.Trim(s.Path.Value, `"`)
+				parts := strings.Split(naked, "/")
+				theImport = parts[len(parts)-1]
+			}
+		}
+	}
+
+	if theImport == "" {
+		// if it's not import we can't have any templates in here...
 		return nil
 	}
 
-	realRes := make(map[string]fileMatches)
-
-	for f, theImport := range files {
-		matches := getMatchesFromFile(f, fset, theImport, pkgName)
-
-		var funs []sortFunToGen
-		importMap := make(map[string]bool)
-
-		// we need to union the list of functions
-		for _, match := range matches {
-			var buf bytes.Buffer
-
-			err := printer.Fprint(&buf, fset, match.orderTyp)
-			if err != nil {
-				// TODO
-				panic(err)
-			}
-
-			sliceIdent := buf.String()
-
-			recv := ""
-			recvVar := ""
-
-			if match.fun.Recv != nil {
-				var buf bytes.Buffer
-
-				// we know at this point we have a valid method...
-				recvVar = match.fun.Recv.List[0].Names[0].Name
-
-				buf.WriteString("(")
-				buf.WriteString(recvVar)
-
-				// TODO should handle error here because it's not stated the
-				// print only supports type X, it's implementation detail
-				err := printer.Fprint(&buf, fset, match.fun.Recv.List[0].Type)
-				if err != nil {
-					panic(err)
-				}
-
-				buf.WriteString(")")
-
-				recv = buf.String()
-			}
-
-			// we need to calculate the required imports
-			importMatches := findImports(match.orderTyp, f.Imports)
-
-			for i := range importMatches {
-				importName := i.Path.Value
-				if i.Name != nil {
-					importName = i.Name.Name + " " + importName
-				}
-
-				importMap[importName] = true
-			}
-
-			funs = append(funs, sortFunToGen{
-				name:    match.fun.Name.Name,
-				typ:     sliceIdent,
-				recv:    recv,
-				recvVar: recvVar,
-			})
-		}
-
-		fileName := fset.Position(f.Pos()).Filename
-
-		if len(funs) > 0 {
-			realRes[fileName] = fileMatches{
-				funs:    funs,
-				imports: importMap,
-			}
-		}
-	}
-
-	return realRes
-}
-
-type match struct {
-	// the actual function/method that has matched
-	fun *ast.FuncDecl
-
-	// the "type" of the slice parameter (the first one); i.e.
-	// the expression that appears after the '[]'
-	orderTyp ast.Expr
-}
-
-func getMatchesFromFile(f *ast.File, fset *token.FileSet, theImport string, goPkg string) []match {
 	var matches []match
 
 Decls:
-	for _, d := range f.Decls {
+	for _, d := range g.file.Decls {
 		fun, ok := d.(*ast.FuncDecl)
 		if !ok {
 			continue
@@ -324,8 +372,21 @@ Decls:
 			continue
 		}
 
-		at, ok := paramList[0].(*ast.ArrayType)
-		if !ok || at.Len != nil {
+		m := match{
+			fun: fun,
+		}
+
+		if g.isSliceExpr(paramList[0]) {
+			m.orderTyp = paramList[0]
+			m.isImmSlice = false
+		}
+
+		if g.isImmSliceExpr(paramList[0]) {
+			m.orderTyp = paramList[0]
+			m.isImmSlice = true
+		}
+
+		if m.orderTyp == nil {
 			continue
 		}
 
@@ -335,118 +396,306 @@ Decls:
 			}
 		}
 
-		infof("found a match at %v", fset.Position(fun.Pos()))
+		infof("found a match at %v", g.fset.Position(fun.Pos()))
 
-		matches = append(matches, match{
-			fun:      fun,
-			orderTyp: at.Elt,
-		})
+		matches = append(matches, m)
 	}
 
 	return matches
 }
 
-func genMatches(matches map[string]fileMatches, pkg string, path string, licenseHeader string) {
+func (g *generator) createToGen(matches []match) ([]toGen, map[string]bool) {
 
-	license := licenseHeader
+	var funs []toGen
+	importMap := make(map[string]bool)
+
+	// we need to union the list of functions
+	for _, match := range matches {
+		var buf bytes.Buffer
+
+		if err := printer.Fprint(&buf, g.fset, match.orderTyp); err != nil {
+			fatalf("could not ast print type: %v", err)
+		}
+
+		sliceIdent := buf.String()
+
+		recv := ""
+		recvVar := ""
+
+		if match.fun.Recv != nil {
+			var buf bytes.Buffer
+
+			// we know at this point we have a valid method...
+			recvVar = match.fun.Recv.List[0].Names[0].Name
+
+			buf.WriteString("(")
+			buf.WriteString(recvVar)
+
+			if err := printer.Fprint(&buf, g.fset, match.fun.Recv.List[0].Type); err != nil {
+				fatalf("could not ast print recv: %v", err)
+			}
+
+			buf.WriteString(")")
+
+			recv = buf.String()
+		}
+
+		// we need to calculate the required imports
+		importMatches := findImports(match.orderTyp, g.file.Imports)
+
+		for i := range importMatches {
+			importName := i.Path.Value
+			if i.Name != nil {
+				importName = i.Name.Name + " " + importName
+			}
+
+			importMap[importName] = true
+		}
+
+		funs = append(funs, toGen{
+			orderFn: match.fun.Name.Name,
+			typ:     sliceIdent,
+			recvTyp: recv,
+			recvVar: recvVar,
+
+			imm: match.isImmSlice,
+		})
+	}
+
+	return funs, importMap
+}
+
+// a match is a container for a matching func/meth in a file
+type match struct {
+	// the actual function/method that has matched
+	fun *ast.FuncDecl
+
+	// the "type" of the slice parameter (the first one);
+	// for a slice this is the ArrayType; for an imm slice
+	// this will be a pointer to an imm slice
+	orderTyp ast.Expr
+
+	// whether the type is an immutable slice or not (i.e. a regular
+	// slice)
+	isImmSlice bool
+}
+
+func (g *generator) isSliceExpr(e ast.Expr) bool {
+	// this type must be either an array type, specifically
+	// with Len == nil (which implies a slice)
+	at, ok := e.(*ast.ArrayType)
+	if !ok || at.Len != nil {
+		return false
+	}
+
+	return true
+}
+
+func (g *generator) isImmSliceExpr(e ast.Expr) bool {
+	// must be a pointer to an immutable slice
+	// could be defined in this package or another package
+
+	ste, ok := e.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+
+	var ip string
+	var typ string
+
+	if se, ok := ste.X.(*ast.SelectorExpr); ok {
+		// X must be simple ident.ident
+		// this is safe to do because the definition of order functions can only be top level
+		// hence there can be no variable/anything in a package that compiles that shadows and
+		// import name; hence a selctor expression where the X matches an import
+
+		pid, ok := se.X.(*ast.Ident)
+		if !ok {
+			return false
+		}
+
+		// resolve this ident to a package import path
+		for _, is := range g.file.Imports {
+
+			p := strings.Trim(is.Path.Value, "\"")
+
+			if (is.Name != nil && is.Name.Name == pid.Name) || path.Base(p) == pid.Name {
+				ip = p
+				break
+			}
+		}
+
+		typ = se.Sel.Name
+	} else if i, ok := ste.X.(*ast.Ident); ok {
+		// this package
+		ip = g.pkg.ImportPath
+		typ = i.Name
+	} else {
+		return false
+	}
+
+	if ip == "" || typ == "" {
+		return false
+	}
+
+	if matches, ok := g.typCache[ip]; ok {
+		return matches[typ]
+	}
+
+	bp, ok := g.pkgCache[ip]
+	if !ok {
+		p, err := build.Import(ip, g.pkg.Dir, 0)
+		if err != nil {
+			fatalf("could not load package %q with rel dir %q: %v", ip, g.pkg.Dir, err)
+		}
+
+		g.pkgCache[ip] = p
+		bp = p
+	}
+
+	return g.findImmSlices(bp)[typ]
+}
+
+func (g *generator) genMatches(funs []toGen, imps map[string]bool) {
 
 	// we need to generate one file for non-test matches... and one for test matches
 
-	for fn, fm := range matches {
-		buf := bytes.NewBuffer(nil)
+	fn := g.fset.Position(g.file.Pos()).Filename
 
-		name := filepath.Base(fn)
+	ofName, ok := gogenerate.NameFileFromFile(fn, sortGenCmd)
+	if !ok {
+		fatalf("could not name generated file from %v", fn)
+	}
 
-		if strings.HasSuffix(name, "_test.go") {
-			name = strings.TrimSuffix(name, "_test.go")
-		} else {
-			name = strings.TrimSuffix(name, ".go")
-		}
+	g.pf(g.license)
 
-		name = gogenerate.NameFile(name, sortGenCmd)
-		ofName := filepath.Join(path, name)
-
-		buf.WriteString(license)
-
-		buf.WriteString(`// File generated by sortGen - do not edit
+	g.pf(`// File generated by sortGen - do not edit
 
 		`)
 
-		buf.WriteString(`package ` + pkg + `
+	g.pf(`package %v
 
 			import "sort"
-			import "` + sorter.PkgName + `"
+			import "%v"
 
-		`)
+		`, g.pkg.Name, sorter.PkgName)
 
-		for i := range fm.imports {
-			fmt.Fprintln(buf, "import", i)
+	for i := range imps {
+		g.pf("import %v\n", i)
+	}
+
+	for _, toGen := range funs {
+		tmpl := struct {
+			Recv  string
+			Sort  string
+			Name  string
+			Typ   string
+			Order string
+		}{
+			Recv:  toGen.recvTyp,
+			Typ:   toGen.typ,
+			Order: toGen.orderFn,
 		}
 
-		for _, toGen := range fm.funs {
-			sortName, stableName := sortFunctions(toGen.name)
+		if toGen.recvTyp != "" {
+			tmpl.Order = toGen.recvVar + "." + toGen.orderFn
+		}
 
-			x := ""
+		sortFns := sortFunctions(toGen.orderFn)
 
-			if toGen.recv != "" {
-				x = toGen.recvVar + "."
+		for i, sn := range []string{"Sort", "Stable"} {
+			tmpl.Sort = sn
+			tmpl.Name = sortFns[i]
+
+			if toGen.imm {
+				g.pt(`
+					func {{.Recv}} {{.Name}}(vs {{.Typ}}) {{.Typ}}{
+						theVs := vs.AsMutable()
+
+						sort.{{.Sort}}(&sorter.Wrapper{
+							LenFunc: func() int {
+								return theVs.Len()
+							},
+							LessFunc: func(i, j int) bool {
+								return bool({{.Order}}(theVs, i, j))
+							},
+							SwapFunc: func(i, j int) {
+								jPrev := theVs.Get(j)
+								iPrev := theVs.Get(i)
+
+								theVs.Set(j, iPrev)
+								theVs.Set(i, jPrev)
+							},
+						})
+
+						return theVs.AsImmutable(vs)
+					}
+					`, tmpl)
+			} else {
+				g.pt(`
+					func {{.Recv}} {{.Name}}(vs {{.Typ}}) {
+						sort.{{.Sort}}(&sorter.Wrapper{
+							LenFunc: func() int {
+								return len(vs)
+							},
+							LessFunc: func(i, j int) bool {
+								return bool({{.Order}}(vs, i, j))
+							},
+							SwapFunc: func(i, j int) {
+								vs[i], vs[j] = vs[j], vs[i]
+							},
+						})
+					}
+					`, tmpl)
 			}
 
-			_, err := fmt.Fprint(buf, `
-			func `+toGen.recv+` `+sortName+`(vs []`+toGen.typ+`) {
-				sort.Sort(&sorter.Wrapper{
-					LenFunc: func() int {
-						return len(vs)
-					},
-					LessFunc: func(i, j int) bool {
-						return bool(`+x+toGen.name+`(vs, i, j))
-					},
-					SwapFunc: func(i, j int) {
-						vs[i], vs[j] = vs[j], vs[i]
-					},
-				})
-			}
-			func `+toGen.recv+` `+stableName+`(vs []`+toGen.typ+`) {
-				sort.Sort(&sorter.Wrapper{
-					LenFunc: func() int {
-						return len(vs)
-					},
-					LessFunc: func(i, j int) bool {
-						return bool(`+x+toGen.name+`(vs, i, j))
-					},
-					SwapFunc: func(i, j int) {
-						vs[i], vs[j] = vs[j], vs[i]
-					},
-				})
-			}
-			`)
-
-			if err != nil {
-				fatalf("unable to print template out: %v", err)
-			}
 		}
+	}
 
-		toWrite := buf.Bytes()
+	toWrite := g.buf.Bytes()
 
-		res, err := imports.Process(ofName, toWrite, nil)
-		if err == nil {
-			toWrite = res
-		}
+	res, err := imports.Process(ofName, toWrite, nil)
+	if err == nil {
+		toWrite = res
+	}
 
-		wrote, err := gogenerate.WriteIfDiff(toWrite, ofName)
-		if err != nil {
-			fatalf("could not write %v: %v", ofName, err)
-		}
+	wrote, err := gogenerate.WriteIfDiff(toWrite, ofName)
+	if err != nil {
+		fatalf("could not write %v: %v", ofName, err)
+	}
 
-		if wrote {
-			infof("writing %v", ofName)
-		} else {
-			infof("skipping writing of %v; it's identical", ofName)
-		}
+	if wrote {
+		infof("writing %v", ofName)
+	} else {
+		infof("skipping writing of %v; it's identical", ofName)
 	}
 }
 
-func sortFunctions(orderFn string) (string, string) {
+func (g *generator) pf(format string, args ...interface{}) {
+	fmt.Fprintf(g.buf, format, args...)
+}
+
+func (g *generator) pt(tmpl string, val interface{}) {
+	// on the basis most templates are for convenience define inline
+	// as raw string literals which start the ` on one line but then start
+	// the template on the next (for readability) we strip the first leading
+	// \n if one exists
+	tmpl = strings.TrimPrefix(tmpl, "\n")
+
+	t := template.New("tmp")
+
+	_, err := t.Parse(tmpl)
+	if err != nil {
+		fatalf("unable to parse template: %v", err)
+	}
+
+	err = t.Execute(g.buf, val)
+	if err != nil {
+		fatalf("cannot execute template: %v", err)
+	}
+}
+
+func sortFunctions(orderFn string) []string {
 	// TODO this can be improved
 
 	lower := false
@@ -462,10 +711,10 @@ func sortFunctions(orderFn string) (string, string) {
 	parts := strings.SplitAfterN(orderFn, split, 2)
 
 	if lower {
-		return "sort" + parts[1], "stableSort" + parts[1]
+		return []string{"sort" + parts[1], "stableSort" + parts[1]}
 	}
 
-	return "Sort" + parts[1], "StableSort" + parts[1]
+	return []string{"Sort" + parts[1], "StableSort" + parts[1]}
 }
 
 type importFinder struct {
@@ -506,35 +755,6 @@ func findImports(exp ast.Expr, imports []*ast.ImportSpec) map[*ast.ImportSpec]bo
 	ast.Walk(finder, exp)
 
 	return finder.matches
-}
-
-func commentString(r string) string {
-	res := ""
-
-	buf := bytes.NewBuffer([]byte(r))
-
-	lastLineEmpty := false
-	scanner := bufio.NewScanner(buf)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			lastLineEmpty = true
-		}
-		res = res + fmt.Sprintln("//", line)
-	}
-
-	if err := scanner.Err(); err != nil {
-		// this really would be exceptional... because we passed in a string
-		panic(err)
-	}
-
-	// ensure we have a space before package
-	if !lastLineEmpty {
-		res = res + "\n"
-	}
-
-	return res
 }
 
 func fatalf(format string, args ...interface{}) {
