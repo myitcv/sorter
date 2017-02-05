@@ -23,12 +23,10 @@ shopt -s globstar
 shopt -s extglob
 
 export GOPATH=$PWD/_vendor:$GOPATH
-export PATH="${GOPATH//://bin:}/bin:$PATH"
+export PATH=$GOPATH/bin:$PATH
 
 rm -f !(_vendor)/**/gen_*.go
 
-# TODO use gg
-go install github.com/myitcv/sorter/cmd/sortGen
 go install github.com/myitcv/immutable/cmd/immutableGen
 
 go generate ./...
@@ -36,9 +34,9 @@ go install ./...
 go vet ./...
 go test ./...
 
-cd cmd/sortGen/_testFiles/
+cd cmd/immutableGen/internal/coretest/
 
-go generate ./...
-go test ./...
-go install ./...
-go vet ./...
+go generate
+go test
+go install
+go vet

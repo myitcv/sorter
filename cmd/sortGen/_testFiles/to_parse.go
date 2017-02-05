@@ -1,12 +1,17 @@
-//go:generate sortGen
 package main
+
+//go:generate sortGen
+//go:generate immutableGen
 
 import (
 	"bytes"
 	"fmt"
 
 	"github.com/myitcv/sorter"
+	"github.com/myitcv/sorter/cmd/sortGen/_testFiles/internal/other"
 )
+
+type _Imm_MySlice []string
 
 type person struct {
 	name string
@@ -34,6 +39,16 @@ func main() {
 // MATCH
 func orderByName(persons []person, i, j int) sorter.Ordered {
 	return persons[i].name < persons[j].name
+}
+
+// MATCH - same package
+func orderMySlice(things *MySlice, i, j int) sorter.Ordered {
+	return things.Get(i) < things.Get(j)
+}
+
+// MATCH - other package
+func orderOtherMySlice(things *other.MySlice, i, j int) sorter.Ordered {
+	return things.Get(i) < things.Get(j)
 }
 
 // fail

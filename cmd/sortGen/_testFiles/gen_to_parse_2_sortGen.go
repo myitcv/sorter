@@ -19,7 +19,7 @@ func SortByAge(vs []person) {
 	})
 }
 func StableSortByAge(vs []person) {
-	sort.Sort(&sorter.Wrapper{
+	sort.Stable(&sorter.Wrapper{
 		LenFunc: func() int {
 			return len(vs)
 		},
