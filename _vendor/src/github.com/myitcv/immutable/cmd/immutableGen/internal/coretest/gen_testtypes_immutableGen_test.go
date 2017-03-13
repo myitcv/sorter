@@ -17,8 +17,6 @@ import (
 // 	map[string]int
 //
 type MyTestMap struct {
-	//github.com/myitcv/immutable:ImmutableType
-
 	theMap  map[string]int
 	mutable bool
 	__tmpl  _Imm_MyTestMap
@@ -157,6 +155,16 @@ func (m *MyTestMap) Del(k string) *MyTestMap {
 	return res
 }
 
+func (m *MyTestMap) ToMap() map[string]int {
+	res := make(map[string]int)
+
+	for k, v := range m.theMap {
+		res[k] = v
+	}
+
+	return res
+}
+
 // a comment about Slice
 //
 // MyTestSlice is an immutable type and has the following template:
@@ -164,8 +172,6 @@ func (m *MyTestMap) Del(k string) *MyTestMap {
 // 	[]*string
 //
 type MyTestSlice struct {
-	//github.com/myitcv/immutable:ImmutableType
-
 	theSlice []*string
 	mutable  bool
 	__tmpl   _Imm_MyTestSlice
@@ -301,6 +307,17 @@ func (m *MyTestSlice) AppendSlice(v *MyTestSlice) *MyTestSlice {
 	return m.Append(v.Range()...)
 }
 
+func (m *MyTestSlice) ToSlice() []*string {
+	if m == nil || m.theSlice == nil {
+		return nil
+	}
+
+	res := make([]*string, len(m.theSlice))
+	copy(res, m.theSlice)
+
+	return res
+}
+
 // a comment about myStruct
 //
 // MyTestStruct is an immutable type and has the following template:
@@ -313,7 +330,6 @@ func (m *MyTestSlice) AppendSlice(v *MyTestSlice) *MyTestSlice {
 // 	}
 //
 type MyTestStruct struct {
-	//github.com/myitcv/immutable:ImmutableType
 	//somethingspecial
 
 	_Name, _surname  string `tag:"value"`
