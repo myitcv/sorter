@@ -12,8 +12,6 @@ import (
 // 	[]string
 //
 type MySlice struct {
-	//github.com/myitcv/immutable:ImmutableType
-
 	theSlice []string
 	mutable  bool
 	__tmpl   _Imm_MySlice
@@ -147,4 +145,15 @@ func (m *MySlice) Append(v ...string) *MySlice {
 
 func (m *MySlice) AppendSlice(v *MySlice) *MySlice {
 	return m.Append(v.Range()...)
+}
+
+func (m *MySlice) ToSlice() []string {
+	if m == nil || m.theSlice == nil {
+		return nil
+	}
+
+	res := make([]string, len(m.theSlice))
+	copy(res, m.theSlice)
+
+	return res
 }

@@ -17,8 +17,6 @@ import (
 // 	map[string]int
 //
 type myTestMap struct {
-	//github.com/myitcv/immutable:ImmutableType
-
 	theMap  map[string]int
 	mutable bool
 	__tmpl  _Imm_myTestMap
@@ -153,6 +151,16 @@ func (m *myTestMap) Del(k string) *myTestMap {
 
 	res := m.dup()
 	delete(res.theMap, k)
+
+	return res
+}
+
+func (m *myTestMap) ToMap() map[string]int {
+	res := make(map[string]int)
+
+	for k, v := range m.theMap {
+		res[k] = v
+	}
 
 	return res
 }

@@ -14,6 +14,8 @@ type immStruct struct {
 	name string
 	dec  *ast.GenDecl
 	st   *ast.StructType
+
+	special bool
 }
 
 func (o *output) genImmStructs(structs []immStruct) {
@@ -30,7 +32,6 @@ func (o *output) genImmStructs(structs []immStruct) {
 
 		// start of struct
 		o.pfln("type %v struct {", s.name)
-		o.pfln("\t//%v", immutable.ImmTypeIdentifier)
 
 		o.printLeadSpecCommsFor(s.st)
 
@@ -95,6 +96,13 @@ func (o *output) genImmStructs(structs []immStruct) {
 			}
 
 			res := *s
+		`, exp, s.name)
+		if s.special {
+			o.pt(`
+			res._Key.Version++
+			`, exp, nil)
+		}
+		o.pt(`
 			res.mutable = true
 			return &res
 		}
@@ -160,6 +168,13 @@ func (o *output) genImmStructs(structs []immStruct) {
 				}
 
 				res := *s
+			`, exp, tmpl)
+			if s.special {
+				o.pt(`
+				res._Key.Version++
+				`, exp, tmpl)
+			}
+			o.pt(`
 				res.`+fieldHidingPrefix+`{{.Field.Name}} = n
 				return &res
 			}
