@@ -2,6 +2,8 @@
 
 package other
 
+//immutableVet:skipFile
+
 import (
 	"github.com/myitcv/immutable"
 )
@@ -17,7 +19,8 @@ type MySlice struct {
 	__tmpl   _Imm_MySlice
 }
 
-var _ immutable.Immutable = &MySlice{}
+var _ immutable.Immutable = new(MySlice)
+var _ = new(MySlice).__tmpl
 
 func NewMySlice(s ...string) *MySlice {
 	c := make([]string, len(s))
