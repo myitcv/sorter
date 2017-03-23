@@ -145,18 +145,3 @@ func (m *MySlice) Append(v ...string) *MySlice {
 
 	return res
 }
-
-func (m *MySlice) AppendSlice(v *MySlice) *MySlice {
-	return m.Append(v.Range()...)
-}
-
-func (m *MySlice) ToSlice() []string {
-	if m == nil || m.theSlice == nil {
-		return nil
-	}
-
-	res := make([]string, len(m.theSlice))
-	copy(res, m.theSlice)
-
-	return res
-}
