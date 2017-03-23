@@ -134,27 +134,11 @@ func gen(dir, license string) {
 	// do this early
 	g.findImmSlices(g.pkg)
 
-	// we are only interested in scanning the Go and Test Go files in this
-	// package and non-sortGen generated files for sorted templates
-	isGoFile := func(fi os.FileInfo) bool {
-		if gogenerate.FileGeneratedBy(fi.Name(), sortGenCmd) {
-			return false
-		}
-
-		var toCheck []string
-		toCheck = append(toCheck, g.pkg.GoFiles...)
-		toCheck = append(toCheck, g.pkg.TestGoFiles...)
-
-		for _, v := range toCheck {
-			if fi.Name() == v {
-				return true
-			}
-		}
-
-		return false
+	notGenByUs := func(fi os.FileInfo) bool {
+		return !gogenerate.FileGeneratedBy(fi.Name(), sortGenCmd)
 	}
 
-	pkgs, err := parser.ParseDir(g.fset, g.pkg.Dir, isGoFile, 0)
+	pkgs, err := parser.ParseDir(g.fset, g.pkg.Dir, notGenByUs, 0)
 	if err != nil {
 		fatalf("could not parse dir %v: %v", g.pkg.Dir, err)
 	}
