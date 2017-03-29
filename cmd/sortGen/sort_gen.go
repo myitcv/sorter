@@ -252,7 +252,7 @@ func (g *generator) findImmSlices(bp *build.Package) map[string]bool {
 			for _, s := range gd.Specs {
 				ts := s.(*ast.TypeSpec)
 
-				name, isit := immutable.IsImmTmpl(ts)
+				name, isit := immutable.IsImmTmplAst(ts)
 
 				if !isit {
 					continue Specs
