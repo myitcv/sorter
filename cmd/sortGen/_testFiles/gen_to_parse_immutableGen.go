@@ -145,3 +145,13 @@ func (m *MySlice) Append(v ...string) *MySlice {
 
 	return res
 }
+func (s *MySlice) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
+	if s == nil {
+		return true
+	}
+
+	if s.Mutable() {
+		return false
+	}
+	return true
+}
