@@ -24,7 +24,7 @@ import (
 	"golang.org/x/tools/imports"
 
 	"github.com/myitcv/gogenerate"
-	"github.com/myitcv/immutable"
+	"github.com/myitcv/immutable/util"
 	"github.com/myitcv/sorter"
 )
 
@@ -252,7 +252,7 @@ func (g *generator) findImmSlices(bp *build.Package) map[string]bool {
 			for _, s := range gd.Specs {
 				ts := s.(*ast.TypeSpec)
 
-				name, isit := immutable.IsImmTmplAst(ts)
+				name, isit := util.IsImmTmplAst(ts)
 
 				if !isit {
 					continue Specs
