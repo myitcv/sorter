@@ -5,7 +5,7 @@ package other
 //immutableVet:skipFile
 
 import (
-	"github.com/myitcv/immutable"
+	"myitcv.io/immutable"
 )
 
 //

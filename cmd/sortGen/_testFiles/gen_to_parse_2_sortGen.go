@@ -3,7 +3,7 @@
 package main
 
 import "sort"
-import "github.com/myitcv/sorter"
+import "myitcv.io/sorter"
 
 func SortByAge(vs []person) {
 	sort.Sort(&sorter.Wrapper{

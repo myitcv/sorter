@@ -1,7 +1,7 @@
 // Copyright (c) 2016 Paul Jolly <paul@myitcv.org.uk>, all rights reserved.
 // Use of this document is governed by a license found in the LICENSE document.
 
-package main
+package main // import "myitcv.io/sorter/cmd/sortGen"
 
 import (
 	"bytes"
@@ -23,9 +23,9 @@ import (
 
 	"golang.org/x/tools/imports"
 
-	"github.com/myitcv/gogenerate"
-	"github.com/myitcv/immutable/util"
-	"github.com/myitcv/sorter"
+	"myitcv.io/gogenerate"
+	"myitcv.io/immutable/util"
+	"myitcv.io/sorter"
 )
 
 const (
