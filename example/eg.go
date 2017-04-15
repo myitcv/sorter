@@ -3,12 +3,12 @@
 
 //go:generate sortGen -licenseFile license_header.txt
 
-package main
+package main // import "myitcv.io/sorter/example"
 
 import (
 	"fmt"
 
-	"github.com/myitcv/sorter"
+	"myitcv.io/sorter"
 )
 
 type person struct {

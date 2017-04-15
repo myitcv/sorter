@@ -16,7 +16,7 @@ const (
 
 	// PkgName is the package to which this definition belongs, again exposed
 	// here for the benefit of generators
-	PkgName = "github.com/myitcv/sorter"
+	PkgName = "myitcv.io/sorter"
 )
 
 // Wrapper is a light wrapper to faciliate calls to sort.Sort

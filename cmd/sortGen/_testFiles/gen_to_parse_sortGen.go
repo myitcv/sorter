@@ -3,9 +3,9 @@
 package main
 
 import "sort"
-import "github.com/myitcv/sorter"
+import "myitcv.io/sorter"
 
-import "github.com/myitcv/sorter/cmd/sortGen/_testFiles/internal/other"
+import "myitcv.io/sorter/cmd/sortGen/_testFiles/internal/other"
 import "bytes"
 
 func sortByName(vs []person) {

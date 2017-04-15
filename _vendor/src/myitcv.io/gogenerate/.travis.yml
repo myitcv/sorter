@@ -3,7 +3,7 @@ language: go
 go:
   - 1.x
 
-go_import_path: myitcv.io/sorter
+go_import_path: myitcv.io/gogenerate
 
 install: true
 

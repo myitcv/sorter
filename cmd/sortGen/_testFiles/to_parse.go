@@ -7,8 +7,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/myitcv/sorter"
-	"github.com/myitcv/sorter/cmd/sortGen/_testFiles/internal/other"
+	"myitcv.io/sorter"
+	"myitcv.io/sorter/cmd/sortGen/_testFiles/internal/other"
 )
 
 type _Imm_MySlice []string

@@ -33,12 +33,12 @@ See the example and rules below for more details.
 ### Install
 
 ```
-go get -u github.com/myitcv/sorter/cmd/sortGen
+go get -u myitcv.io/sorter/cmd/sortGen
 ```
 
 ### Example
 
-Taking the example from [`example/main.go`](https://github.com/myitcv/sorter/blob/master/example/main.go):
+Taking the example from [`example/main.go`](https://myitcv.io/sorter/blob/master/example/main.go):
 
 ```go
 //go:generate sortGen -licenseFile license_header.txt
@@ -48,7 +48,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/myitcv/sorter"
+	"myitcv.io/sorter"
 )
 
 type person struct {
@@ -99,7 +99,7 @@ Name sorted: [{Jill 34} {Paul 25} {Sarah 25}]
 Age sorted: [{Paul 25} {Sarah 25} {Jill 34}]
 ```
 
-Examine the contents of [`gen_main_sorter.go`](https://github.com/myitcv/sorter/blob/master/example/gen_main_sorter.go) to see the generated functions.
+Examine the contents of [`gen_main_sorter.go`](https://myitcv.io/sorter/blob/master/example/gen_main_sorter.go) to see the generated functions.
 
 ### Features
 
@@ -114,7 +114,7 @@ to be included (commented) at the top of each generated file
 2. The order function/method name must be of the form `"order*"` or `"Order*"` (more strictly `^[oO]rder[[:word:]]+` in a [regex](https://godoc.org/regexp)
    [pattern](https://github.com/google/re2/wiki/Syntax))
 3. The parameters of the order function/method must be a slice type, followed by two `int`'s
-4. The return type must be `github.com/myitcv/sorter.Ordered`
+4. The return type must be `myitcv.io/sorter.Ordered`
 
 The sort functions/methods generated will be of the form `"sort*"` or `"Sort*"` and `"stableSort*"` or `"StableSort*"`
 (following the capitalisation of the order function). They will be written to a file with a name corresponding to the

@@ -1,7 +1,7 @@
 //go:generate sortGen
 package main
 
-import mysorter "github.com/myitcv/sorter"
+import mysorter "myitcv.io/sorter"
 
 // MATCH
 func OrderByAge(persons []person, i, j int) mysorter.Ordered {
