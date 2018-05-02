@@ -112,21 +112,21 @@ func (m *MyTestMap) Range() map[string]int {
 	return m.theMap
 }
 
-func (m *MyTestMap) WithMutable(f func(mi *MyTestMap)) *MyTestMap {
-	res := m.AsMutable()
+func (mr *MyTestMap) WithMutable(f func(m *MyTestMap)) *MyTestMap {
+	res := mr.AsMutable()
 	f(res)
-	res = res.AsImmutable(m)
+	res = res.AsImmutable(mr)
 
 	return res
 }
 
-func (m *MyTestMap) WithImmutable(f func(mi *MyTestMap)) *MyTestMap {
-	prev := m.mutable
-	m.mutable = false
-	f(m)
-	m.mutable = prev
+func (mr *MyTestMap) WithImmutable(f func(m *MyTestMap)) *MyTestMap {
+	prev := mr.mutable
+	mr.mutable = false
+	f(mr)
+	mr.mutable = prev
 
-	return m
+	return mr
 }
 
 func (m *MyTestMap) Set(k string, v int) *MyTestMap {
@@ -330,7 +330,8 @@ func (s *MyTestSlice) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
 type MyTestStruct struct {
 	//somethingspecial
 
-	_Name, _surname  string `tag:"value"`
+	_Name            string `tag:"value"`
+	_surname         string `tag:"value"`
 	_age             int    `tag:"age"`
 	_fieldWithoutTag bool
 

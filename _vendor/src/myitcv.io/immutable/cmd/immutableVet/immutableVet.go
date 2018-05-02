@@ -114,7 +114,8 @@ func loadImmIntf() {
 	}
 
 	conf := types.Config{
-		Importer: importer.Default(),
+		FakeImportC: true,
+		Importer:    importer.For("gc", nil),
 	}
 
 	tpkg, err := conf.Check(ip, fset, files, nil)
@@ -181,7 +182,16 @@ func vet(wd string, specs []string) []immErr {
 }
 
 func (iv *immutableVetter) ensurePointerTyp(n ast.Node, typ ast.Expr) {
+	if ts, ok := n.(*ast.TypeSpec); ok {
+		if ts.Assign.IsValid() {
+			// we are an alias; this is fine in all cases
+			return
+		}
+	}
 	t := iv.info.Types[typ].Type
+	if t == nil {
+		return
+	}
 	p := types.NewPointer(t)
 	switch util.IsImmType(p).(type) {
 	case util.ImmTypeMap, util.ImmTypeSlice, util.ImmTypeStruct:
@@ -269,7 +279,8 @@ func (iv *immutableVetter) Visit(node ast.Node) ast.Visitor {
 
 		sel, ok := iv.info.Selections[se]
 		if !ok {
-			fatalf("unable to type selection %v", se)
+			// then it must be a qualified identifier
+			break
 		}
 
 		if !isImmListOrMap(sel.Recv()) {
@@ -401,7 +412,19 @@ func isImmListOrMap(t types.Type) bool {
 }
 
 func newImmutableVetter(ipkg *build.Package, wd string) *immutableVetter {
-	pkgs, err := parser.ParseDir(fset, ipkg.Dir, nil, parser.ParseComments)
+	goFiles := make(map[string]bool)
+
+	for _, v := range [][]string{ipkg.GoFiles, ipkg.TestGoFiles, ipkg.XTestGoFiles} {
+		for _, f := range v {
+			goFiles[f] = true
+		}
+	}
+
+	isGoFile := func(fi os.FileInfo) bool {
+		return goFiles[fi.Name()]
+	}
+
+	pkgs, err := parser.ParseDir(fset, ipkg.Dir, isGoFile, parser.ParseComments)
 	if err != nil {
 		fatalf("could not parse package directory for %v", ipkg.Name)
 	}
@@ -468,7 +491,7 @@ func (iv *immutableVetter) vetPackages() []immErr {
 				for _, s := range gd.Specs {
 					ts := s.(*ast.TypeSpec)
 
-					_, ok := util.IsImmTmplAst(ts)
+					_, ok := util.IsImmTmpl(ts)
 					if !ok {
 						continue
 					}

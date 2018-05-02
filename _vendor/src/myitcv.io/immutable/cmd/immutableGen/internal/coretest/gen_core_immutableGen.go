@@ -112,21 +112,21 @@ func (m *MyMap) Range() map[string]int {
 	return m.theMap
 }
 
-func (m *MyMap) WithMutable(f func(mi *MyMap)) *MyMap {
-	res := m.AsMutable()
+func (mr *MyMap) WithMutable(f func(m *MyMap)) *MyMap {
+	res := mr.AsMutable()
 	f(res)
-	res = res.AsImmutable(m)
+	res = res.AsImmutable(mr)
 
 	return res
 }
 
-func (m *MyMap) WithImmutable(f func(mi *MyMap)) *MyMap {
-	prev := m.mutable
-	m.mutable = false
-	f(m)
-	m.mutable = prev
+func (mr *MyMap) WithImmutable(f func(m *MyMap)) *MyMap {
+	prev := mr.mutable
+	mr.mutable = false
+	f(mr)
+	mr.mutable = prev
 
-	return m
+	return mr
 }
 
 func (m *MyMap) Set(k string, v int) *MyMap {
@@ -267,21 +267,21 @@ func (m *AM) Range() map[*A]*A {
 	return m.theMap
 }
 
-func (m *AM) WithMutable(f func(mi *AM)) *AM {
-	res := m.AsMutable()
+func (mr *AM) WithMutable(f func(a *AM)) *AM {
+	res := mr.AsMutable()
 	f(res)
-	res = res.AsImmutable(m)
+	res = res.AsImmutable(mr)
 
 	return res
 }
 
-func (m *AM) WithImmutable(f func(mi *AM)) *AM {
-	prev := m.mutable
-	m.mutable = false
-	f(m)
-	m.mutable = prev
+func (mr *AM) WithImmutable(f func(a *AM)) *AM {
+	prev := mr.mutable
+	mr.mutable = false
+	f(mr)
+	mr.mutable = prev
 
-	return m
+	return mr
 }
 
 func (m *AM) Set(k *A, v *A) *AM {
@@ -677,7 +677,8 @@ func (s *AS) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
 //
 type MyStruct struct {
 	_Key             MyStructKey
-	_Name, _surname  string `tag:"value"`
+	_Name            string `tag:"value"`
+	_surname         string `tag:"value"`
 	_age             int    `tag:"age"`
 	_string          string
 	_fieldWithoutTag bool
@@ -959,11 +960,8 @@ func (s *A) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
 	{
 		v := s._Blah
 
-		switch v := v.(type) {
-		case immutable.Immutable:
-			if !v.IsDeeplyNonMutable(seen) {
-				return false
-			}
+		if v != nil && !v.IsDeeplyNonMutable(seen) {
+			return false
 		}
 	}
 	return true
@@ -1095,11 +1093,8 @@ func (s *BlahUse) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
 	{
 		v := s._Blah
 
-		switch v := v.(type) {
-		case immutable.Immutable:
-			if !v.IsDeeplyNonMutable(seen) {
-				return false
-			}
+		if v != nil && !v.IsDeeplyNonMutable(seen) {
+			return false
 		}
 	}
 	return true
