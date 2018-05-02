@@ -1,4 +1,4 @@
     ./_vendor/src/golang.org/x/tools        721f218496963f33ebc9fbc5cdbdeed007ad9c49  https://go.googlesource.com/tools
     ./_vendor/src/myitcv.io/gogenerate      bd69a94c96953d20e106734856b69d71c8fa122b  git@github.com:myitcv/gogenerate
     ./_vendor/src/myitcv.io/hybridimporter  bf5c702cde42bfc64f0a220b9b31055b8f3521a2  git@github.com:myitcv/hybridimporter
-    ./_vendor/src/myitcv.io/immutable       d46da5094119d546278d0a5523a489f8fe07f561  git@github.com:myitcv/immutable       go1.11
+    ./_vendor/src/myitcv.io/immutable       22ba5943c7feb719543c6bae647d05b70a331def  git@github.com:myitcv/immutable       go1.11
