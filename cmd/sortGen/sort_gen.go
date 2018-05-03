@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -558,7 +559,13 @@ func (g *generator) genMatches(funs []toGen, imps map[string]bool) {
 
 		`, g.pkg.Name, sorter.PkgName)
 
+	var impSlice []string
 	for i := range imps {
+		impSlice = append(impSlice, i)
+	}
+	sort.Strings(impSlice)
+
+	for _, i := range impSlice {
 		g.pf("import %v\n", i)
 	}
 
