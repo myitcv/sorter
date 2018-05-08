@@ -13,6 +13,7 @@ import (
 	"go/printer"
 	"go/token"
 	"html/template"
+	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -644,15 +645,8 @@ func (g *generator) genMatches(funs []toGen, imps map[string]bool) {
 		toWrite = res
 	}
 
-	wrote, err := gogenerate.WriteIfDiff(toWrite, ofName)
-	if err != nil {
+	if err := ioutil.WriteFile(ofName, toWrite, 0644); err != nil {
 		fatalf("could not write %v: %v", ofName, err)
-	}
-
-	if wrote {
-		infof("writing %v", ofName)
-	} else {
-		infof("skipping writing of %v; it's identical", ofName)
 	}
 }
 
