@@ -1,0 +1,7 @@
+{
+  "Cmds": [
+    "myitcv.io/immutable/cmd/immutableGen",
+    "myitcv.io/sorter/cmd/sortGen"
+  ]
+}
+

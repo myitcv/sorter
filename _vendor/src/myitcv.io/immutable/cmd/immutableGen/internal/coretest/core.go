@@ -1,6 +1,9 @@
 package coretest
 
-import "myitcv.io/immutable"
+import (
+	"myitcv.io/immutable"
+	"myitcv.io/immutable/cmd/immutableGen/internal/coretest/pkga"
+)
 
 //go:generate immutableGen -licenseFile license.txt -G "echo \"hello world\""
 
@@ -77,6 +80,17 @@ func (b BlahNonMutable) Mutable() bool {
 
 func (b BlahNonMutable) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
 	return true
+}
+
+// types for testing embedding
+type _Imm_Embed1 struct {
+	Name string
+	*Embed2
+	*pkga.PkgA
+}
+
+type _Imm_Embed2 struct {
+	Age int
 }
 
 func main() {
