@@ -3,4 +3,4 @@
     ./_vendor/src/myitcv.io/gogenerate       65b5604c25b4f8025ae3891a7334144a0ebfc398  git@github.com:myitcv/gogenerate
     ./_vendor/src/myitcv.io/gg               767ca96311f3e7f7b6fb3aa05aab6a69aaefdc0d  git@github.com:myitcv/gg              go1.11
     ./_vendor/src/myitcv.io/hybridimporter   86faf56690449bc7684080a5ed1be1df8247e7c6  git@github.com:myitcv/hybridimporter
-    ./_vendor/src/myitcv.io/immutable        1486f3628fe13df1b6a531277af7ecf900118618  git@github.com:myitcv/immutable       go1.11
+    ./_vendor/src/myitcv.io/immutable        7bb4abbdbdc692fb3236dfdfb1cf66b308cb9c73  git@github.com:myitcv/immutable       go1.11

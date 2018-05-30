@@ -11,6 +11,8 @@ import (
 	"myitcv.io/immutable"
 
 	"myitcv.io/immutable/cmd/immutableGen/internal/coretest/pkga"
+	"myitcv.io/immutable/cmd/immutableGen/internal/coretest/pkgb"
+	"time"
 )
 
 // a comment about MyMap
@@ -1120,6 +1122,120 @@ func (s *BlahUse) SetBlah(n Blah) *BlahUse {
 	return &res
 }
 
+//
+// Clash1 is an immutable type and has the following template:
+//
+// 	struct {
+// 		Clash		string
+// 		NoClash1	string
+// 	}
+//
+type Clash1 struct {
+	field_Clash    string
+	field_NoClash1 string
+
+	mutable bool
+	__tmpl  *_Imm_Clash1
+}
+
+var _ immutable.Immutable = new(Clash1)
+var _ = new(Clash1).__tmpl
+
+func (s *Clash1) AsMutable() *Clash1 {
+	if s.Mutable() {
+		return s
+	}
+
+	res := *s
+	res.mutable = true
+	return &res
+}
+
+func (s *Clash1) AsImmutable(v *Clash1) *Clash1 {
+	if s == nil {
+		return nil
+	}
+
+	if s == v {
+		return s
+	}
+
+	s.mutable = false
+	return s
+}
+
+func (s *Clash1) Mutable() bool {
+	return s.mutable
+}
+
+func (s *Clash1) WithMutable(f func(si *Clash1)) *Clash1 {
+	res := s.AsMutable()
+	f(res)
+	res = res.AsImmutable(s)
+
+	return res
+}
+
+func (s *Clash1) WithImmutable(f func(si *Clash1)) *Clash1 {
+	prev := s.mutable
+	s.mutable = false
+	f(s)
+	s.mutable = prev
+
+	return s
+}
+
+func (s *Clash1) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
+	if s == nil {
+		return true
+	}
+
+	if s.Mutable() {
+		return false
+	}
+
+	if seen == nil {
+		return s.IsDeeplyNonMutable(make(map[interface{}]bool))
+	}
+
+	if seen[s] {
+		return true
+	}
+
+	seen[s] = true
+	return true
+}
+func (s *Clash1) Clash() string {
+	return s.field_Clash
+}
+
+// SetClash is the setter for Clash()
+func (s *Clash1) SetClash(n string) *Clash1 {
+	if s.mutable {
+		s.field_Clash = n
+		return s
+	}
+
+	res := *s
+	res.field_Clash = n
+	return &res
+}
+func (s *Clash1) NoClash1() string {
+	return s.field_NoClash1
+}
+
+// SetNoClash1 is the setter for NoClash1()
+func (s *Clash1) SetNoClash1(n string) *Clash1 {
+	if s.mutable {
+		s.field_NoClash1 = n
+		return s
+	}
+
+	res := *s
+	res.field_NoClash1 = n
+	return &res
+}
+
 // types for testing embedding
 //
 // Embed1 is an immutable type and has the following template:
@@ -1128,12 +1244,20 @@ func (s *BlahUse) SetBlah(n Blah) *BlahUse {
 // 		Name	string
 // 		*Embed2
 // 		*pkga.PkgA
+// 		*Clash1
+// 		*pkga.Clash2
+// 		NonImmStruct
+// 		pkga.NonImmStructA
 // 	}
 //
 type Embed1 struct {
-	field_Name       string
-	anonfield_Embed2 *Embed2
-	anonfield_PkgA   *pkga.PkgA
+	field_Name              string
+	anonfield_Embed2        *Embed2
+	anonfield_PkgA          *pkga.PkgA
+	anonfield_Clash1        *Clash1
+	anonfield_Clash2        *pkga.Clash2
+	anonfield_NonImmStruct  NonImmStruct
+	anonfield_NonImmStructA pkga.NonImmStructA
 
 	mutable bool
 	__tmpl  *_Imm_Embed1
@@ -1218,13 +1342,67 @@ func (s *Embed1) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
 			return false
 		}
 	}
+	{
+		v := s.anonfield_Clash1
+
+		if v != nil && !v.IsDeeplyNonMutable(seen) {
+			return false
+		}
+	}
+	{
+		v := s.anonfield_Clash2
+
+		if v != nil && !v.IsDeeplyNonMutable(seen) {
+			return false
+		}
+	}
 	return true
 }
 func (s *Embed1) Address() string {
 	return s.PkgA().Address()
 }
+func (s *Embed1) SetAddress(n string) *Embed1 {
+	v1 := s.PkgA().SetAddress(n)
+	v0 := s.SetPkgA(v1)
+	return v0
+}
 func (s *Embed1) Age() int {
 	return s.Embed2().Age()
+}
+func (s *Embed1) SetAge(n int) *Embed1 {
+	v1 := s.Embed2().SetAge(n)
+	v0 := s.SetEmbed2(v1)
+	return v0
+}
+func (s *Embed1) Clash1() *Clash1 {
+	return s.anonfield_Clash1
+}
+
+// SetClash1 is the setter for Clash1()
+func (s *Embed1) SetClash1(n *Clash1) *Embed1 {
+	if s.mutable {
+		s.anonfield_Clash1 = n
+		return s
+	}
+
+	res := *s
+	res.anonfield_Clash1 = n
+	return &res
+}
+func (s *Embed1) Clash2() *pkga.Clash2 {
+	return s.anonfield_Clash2
+}
+
+// SetClash2 is the setter for Clash2()
+func (s *Embed1) SetClash2(n *pkga.Clash2) *Embed1 {
+	if s.mutable {
+		s.anonfield_Clash2 = n
+		return s
+	}
+
+	res := *s
+	res.anonfield_Clash2 = n
+	return &res
 }
 func (s *Embed1) Embed2() *Embed2 {
 	return s.anonfield_Embed2
@@ -1256,6 +1434,89 @@ func (s *Embed1) SetName(n string) *Embed1 {
 	res.field_Name = n
 	return &res
 }
+func (s *Embed1) NoClash1() string {
+	return s.Clash1().NoClash1()
+}
+func (s *Embed1) SetNoClash1(n string) *Embed1 {
+	v1 := s.Clash1().SetNoClash1(n)
+	v0 := s.SetClash1(v1)
+	return v0
+}
+func (s *Embed1) NoClash2() string {
+	return s.Clash2().NoClash2()
+}
+func (s *Embed1) SetNoClash2(n string) *Embed1 {
+	v1 := s.Clash2().SetNoClash2(n)
+	v0 := s.SetClash2(v1)
+	return v0
+}
+func (s *Embed1) NonImmStruct() NonImmStruct {
+	return s.anonfield_NonImmStruct
+}
+
+// SetNonImmStruct is the setter for NonImmStruct()
+func (s *Embed1) SetNonImmStruct(n NonImmStruct) *Embed1 {
+	if s.mutable {
+		s.anonfield_NonImmStruct = n
+		return s
+	}
+
+	res := *s
+	res.anonfield_NonImmStruct = n
+	return &res
+}
+func (s *Embed1) NonImmStructA() pkga.NonImmStructA {
+	return s.anonfield_NonImmStructA
+}
+
+// SetNonImmStructA is the setter for NonImmStructA()
+func (s *Embed1) SetNonImmStructA(n pkga.NonImmStructA) *Embed1 {
+	if s.mutable {
+		s.anonfield_NonImmStructA = n
+		return s
+	}
+
+	res := *s
+	res.anonfield_NonImmStructA = n
+	return &res
+}
+func (s *Embed1) Now() time.Time {
+	return s.NonImmStruct().Now
+}
+func (s *Embed1) SetNow(n time.Time) *Embed1 {
+	v1 := s.NonImmStruct()
+	v1.Now = n
+	v0 := s.SetNonImmStruct(v1)
+	return v0
+}
+func (s *Embed1) NowA() time.Time {
+	return s.NonImmStructA().NowA
+}
+func (s *Embed1) SetNowA(n time.Time) *Embed1 {
+	v1 := s.NonImmStructA()
+	v1.NowA = n
+	v0 := s.SetNonImmStructA(v1)
+	return v0
+}
+func (s *Embed1) OtherA() *pkga.OtherA {
+	return s.NonImmStructA().OtherA
+}
+func (s *Embed1) SetOtherA(n *pkga.OtherA) *Embed1 {
+	v1 := s.NonImmStructA()
+	v1.OtherA = n
+	v0 := s.SetNonImmStructA(v1)
+	return v0
+}
+func (s *Embed1) OtherNameA() string {
+	return s.NonImmStructA().OtherA.OtherNameA()
+}
+func (s *Embed1) SetOtherNameA(n string) *Embed1 {
+	v2 := s.NonImmStructA().OtherA.SetOtherNameA(n)
+	v1 := s.NonImmStructA()
+	v1.OtherA = v2
+	v0 := s.SetNonImmStructA(v1)
+	return v0
+}
 func (s *Embed1) PkgA() *pkga.PkgA {
 	return s.anonfield_PkgA
 }
@@ -1270,6 +1531,23 @@ func (s *Embed1) SetPkgA(n *pkga.PkgA) *Embed1 {
 	res := *s
 	res.anonfield_PkgA = n
 	return &res
+}
+func (s *Embed1) PkgB() *pkgb.PkgB {
+	return s.PkgA().PkgB()
+}
+func (s *Embed1) SetPkgB(n *pkgb.PkgB) *Embed1 {
+	v1 := s.PkgA().SetPkgB(n)
+	v0 := s.SetPkgA(v1)
+	return v0
+}
+func (s *Embed1) Postcode() string {
+	return s.PkgA().PkgB().Postcode()
+}
+func (s *Embed1) SetPostcode(n string) *Embed1 {
+	v2 := s.PkgA().PkgB().SetPostcode(n)
+	v1 := s.PkgA().SetPkgB(v2)
+	v0 := s.SetPkgA(v1)
+	return v0
 }
 
 //
@@ -1366,5 +1644,102 @@ func (s *Embed2) SetAge(n int) *Embed2 {
 
 	res := *s
 	res.field_Age = n
+	return &res
+}
+
+//
+// Other is an immutable type and has the following template:
+//
+// 	struct {
+// 		OtherName string
+// 	}
+//
+type Other struct {
+	field_OtherName string
+
+	mutable bool
+	__tmpl  *_Imm_Other
+}
+
+var _ immutable.Immutable = new(Other)
+var _ = new(Other).__tmpl
+
+func (s *Other) AsMutable() *Other {
+	if s.Mutable() {
+		return s
+	}
+
+	res := *s
+	res.mutable = true
+	return &res
+}
+
+func (s *Other) AsImmutable(v *Other) *Other {
+	if s == nil {
+		return nil
+	}
+
+	if s == v {
+		return s
+	}
+
+	s.mutable = false
+	return s
+}
+
+func (s *Other) Mutable() bool {
+	return s.mutable
+}
+
+func (s *Other) WithMutable(f func(si *Other)) *Other {
+	res := s.AsMutable()
+	f(res)
+	res = res.AsImmutable(s)
+
+	return res
+}
+
+func (s *Other) WithImmutable(f func(si *Other)) *Other {
+	prev := s.mutable
+	s.mutable = false
+	f(s)
+	s.mutable = prev
+
+	return s
+}
+
+func (s *Other) IsDeeplyNonMutable(seen map[interface{}]bool) bool {
+	if s == nil {
+		return true
+	}
+
+	if s.Mutable() {
+		return false
+	}
+
+	if seen == nil {
+		return s.IsDeeplyNonMutable(make(map[interface{}]bool))
+	}
+
+	if seen[s] {
+		return true
+	}
+
+	seen[s] = true
+	return true
+}
+func (s *Other) OtherName() string {
+	return s.field_OtherName
+}
+
+// SetOtherName is the setter for OtherName()
+func (s *Other) SetOtherName(n string) *Other {
+	if s.mutable {
+		s.field_OtherName = n
+		return s
+	}
+
+	res := *s
+	res.field_OtherName = n
 	return &res
 }
