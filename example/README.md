@@ -1,3 +1,7 @@
-## `sorter`
+## `** myitcv.io/sorter/example **` has moved
 
-You probably want to look at the [`README.md` for `sortGen`](https://myitcv.io/sorter/tree/master/cmd/sortGen)
+The repository hosting `myitcv.io/sorter/example` has changed.
+
+`myitcv.io/sorter/example` can now be found at:
+
+https://github.com/myitcv/x/tree/master/sorter/example

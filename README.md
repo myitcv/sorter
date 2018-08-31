@@ -1,7 +1,7 @@
-## `myitcv.io/sorter`
+## `** myitcv.io/sorter **` has moved
 
-```
-go get -u myitcv.io/sorter
-```
+The repository hosting `myitcv.io/sorter` has changed.
 
-You probably want to look at the [`README.md` for `sortGen`](https://github.com/myitcv/sorter/tree/master/cmd/sortGen)
+`myitcv.io/sorter` can now be found at:
+
+https://github.com/myitcv/x/tree/master/sorter
